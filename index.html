@@ -121,91 +121,7 @@ const ALL_STATS=[
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
 async function callClaude(messages,system=""){
-  const key=localStorage.getItem("wd_apikey")||"";
-  if(!key)throw new Error("NO_KEY");
-  const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",
-    headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1200,system,messages}),
-  });
-  if(!res.ok){
-    const err=await res.json().catch(()=>({}));
-    throw new Error(err?.error?.message||`API error ${res.status}`);
-  }
-  const data=await res.json();
-  return data.content?.map(b=>b.text||"").join("")||"No response.";
-}
-
-// ─── API KEY SCREEN ───────────────────────────────────────────────────────────
-function ApiKeyScreen({onDone}){
-  const [key,setKey]=useState("");
-  const [show,setShow]=useState(false);
-  const [testing,setTesting]=useState(false);
-  const [error,setError]=useState("");
-
-  async function verify(){
-    const k=key.trim();
-    if(!k.startsWith("sk-ant-")){setError("Key should start with sk-ant-");return;}
-    setTesting(true);setError("");
-    try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":k,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:10,messages:[{role:"user",content:"hi"}]}),
-      });
-      if(res.status===401){setError("Invalid API key — check and try again.");setTesting(false);return;}
-      if(!res.ok&&res.status!==200){setError(`Error ${res.status} — check your key or network.`);setTesting(false);return;}
-      localStorage.setItem("wd_apikey",k);
-      onDone();
-    }catch{setError("Network error — make sure you're online.");}
-    setTesting(false);
-  }
-
-  return(
-    <div style={{height:"calc(var(--vh,1vh)*100)",background:"#09090e",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
-      <div style={{width:"100%",maxWidth:440,background:"#111118",border:"1px solid #1c1c28",borderRadius:20,padding:"32px 24px"}}>
-        <div style={{textAlign:"center",marginBottom:28}}>
-          <div style={{width:56,height:56,background:"linear-gradient(135deg,#e8c858,#a07818)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 14px"}}>⚡</div>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#e8c858",marginBottom:8}}>WorkDesk</div>
-          <div style={{fontSize:14,color:"#888",lineHeight:1.6}}>Enter your Anthropic API key to power the AI features. Your key is stored only on this device — never shared.</div>
-        </div>
-
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:"#555",fontWeight:700,letterSpacing:".07em",textTransform:"uppercase",marginBottom:6}}>Anthropic API Key</div>
-          <div style={{position:"relative"}}>
-            <input
-              type={show?"text":"password"}
-              value={key}
-              onChange={e=>setKey(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter")verify();}}
-              placeholder="sk-ant-api03-…"
-              style={{width:"100%",background:"#0c0c14",border:`1px solid ${error?"#ff5757":"#1c1c2c"}`,borderRadius:10,padding:"12px 44px 12px 13px",color:"#ddd",fontSize:14,fontFamily:"'Courier New',monospace",outline:"none"}}
-            />
-            <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:16,padding:4}}>{show?"🙈":"👁"}</button>
-          </div>
-          {error&&<div style={{fontSize:12,color:"#ff7070",marginTop:6}}>{error}</div>}
-        </div>
-
-        <button
-          onClick={verify}
-          disabled={!key.trim()||testing}
-          style={{width:"100%",background:key.trim()&&!testing?"#e8c858":"#2a2a1a",color:key.trim()&&!testing?"#0d0d10":"#555",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:key.trim()&&!testing?"pointer":"not-allowed",fontFamily:"inherit",marginTop:4,transition:"all .2s"}}
-        >
-          {testing?"Verifying…":"Verify & Continue →"}
-        </button>
-
-        <div style={{marginTop:20,padding:"14px",background:"#0c0c10",borderRadius:10,border:"1px solid #1a1a24"}}>
-          <div style={{fontSize:12,color:"#666",lineHeight:1.7}}>
-            <div style={{color:"#888",fontWeight:700,marginBottom:4}}>How to get your key:</div>
-            <div>1. Go to <span style={{color:"#6898e8"}}>console.anthropic.com</span></div>
-            <div>2. API Keys → Create Key</div>
-            <div>3. Paste it above</div>
-            <div style={{marginTop:8,color:"#555"}}>Your key is saved locally on this device only. No one else can see it.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  throw new Error("AI_UNAVAILABLE");
 }
 
 function buildSystemPrompt(tasks,clients,renewals,workflow,wfFields,settings,categories){
@@ -547,7 +463,6 @@ function OnboardingWizard({onComplete}){
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 function App(){
-  const [apiKeySaved,setApiKeySaved]=useState(()=>!!localStorage.getItem("wd_apikey"));
   const [onboarded,setOnboarded]=useState(()=>!!load("wd_onboarded",false));
   const [settings,setSettings]=useState(()=>load("wd_settings",DEFAULT_SETTINGS));
   const [categories,setCategories]=useState(()=>load("wd_categories",DEFAULT_CATEGORIES));
@@ -717,20 +632,20 @@ function App(){
     const newHist=[...chatHistory,userMsg];
     setChatHistory(newHist);setChatInput("");setAiLoading(true);
     try{const r=await callClaude(newHist.map(m=>({role:m.role,content:m.content})),sys);setChatHistory(h=>[...h,{role:"assistant",content:r}]);}
-    catch(e){setChatHistory(h=>[...h,{role:"assistant",content:e.message==="NO_KEY"?"No API key set — go to Settings → API Key to add yours.":"Connection error. Check your API key or network."}]);}
+    catch{setChatHistory(h=>[...h,{role:"assistant",content:"AI features are not available in this beta build."}]);}
     setAiLoading(false);
   };
   const genBriefing=async()=>{
     setAiLoading(true);setBriefing("");
     try{const r=await callClaude([{role:"user",content:`Generate my personalised daily briefing for ${today}. Priority actions, overdue items, renewals, schedule overview.`}],sys);setBriefing(r);}
-    catch(e){setBriefing(e.message==="NO_KEY"?"No API key — go to Settings → API Key.":"Failed. Check connection.");}setAiLoading(false);
+    catch{setBriefing("AI features are not available in this beta build.");}setAiLoading(false);
   };
   const genEmail=async()=>{
     if(!emailCtx.clientId||!emailCtx.purpose)return;
     const cl=clients.find(c=>c.id===emailCtx.clientId);
     setAiLoading(true);setEmailDraft("");
     try{const r=await callClaude([{role:"user",content:`Draft a professional email to ${cl.name}${cl.email?" ("+cl.email+")":""} for: "${emailCtx.purpose}". Match my communication style. Include subject line.`}],sys);setEmailDraft(r);}
-    catch(e){setEmailDraft(e.message==="NO_KEY"?"No API key — go to Settings → API Key.":"Connection error.");}setAiLoading(false);
+    catch{setEmailDraft("AI features are not available in this beta build.");}setAiLoading(false);
   };
   const genSuggestions=async()=>{
     setAiLoading(true);setSuggestions([]);
@@ -1227,7 +1142,6 @@ function App(){
           clients={clients} tasks={tasks} renewals={renewals}
           onExport={exportData} onImport={()=>setShowImportModal(true)}
           cur={cur} labels={labels}
-          onChangeKey={()=>setApiKeySaved(false)}
         />
       )}
     </div>
@@ -1235,15 +1149,6 @@ function App(){
 
   const viewTitle=navItems.find(n=>n.key===view)?.label||settings.appName||"WorkDesk";
   const appName=settings.appName||"WorkDesk";
-
-  if(!apiKeySaved){
-    return(
-      <>
-        <style>{buildCSS(DEFAULT_SETTINGS.accentColor,true)}</style>
-        <ApiKeyScreen onDone={()=>setApiKeySaved(true)}/>
-      </>
-    );
-  }
 
   if(!onboarded){
     return(
@@ -1452,7 +1357,7 @@ function App(){
 }
 
 // ─── SETTINGS VIEW ───────────────────────────────────────────────────────────
-function SettingsView({settings,setSettings,categories,setCategories,wfFields,setWfFields,clients,tasks,renewals,onExport,onImport,cur,labels,onChangeKey}){
+function SettingsView({settings,setSettings,categories,setCategories,wfFields,setWfFields,clients,tasks,renewals,onExport,onImport,cur,labels}){
   const s=(k,v)=>setSettings(x=>({...x,[k]:v}));
   const ACCENT_COLORS=["#e8c858","#38c3e8","#57ff9c","#e838a8","#9888f0","#ff8857","#ff5757","#a8e838","#e8a838","#ffffff"];
   const ALL_MODULES=["home","tasks","renewals","clients","projects","finances","workflow","notes","settings"];
@@ -1601,16 +1506,6 @@ function SettingsView({settings,setSettings,categories,setCategories,wfFields,se
           </div>
         ))}
         <button className="btn btn-ghost btn-full btn-sm" style={{marginTop:4}} onClick={()=>setWfFields(fs=>[...fs,{key:"wf"+uid(),label:"New Field",icon:"📌"}])}>+ Add Field</button>
-      </div>
-
-      {/* API KEY */}
-      <div className="settings-section">
-        <div className="settings-section-title">🔑 API Key</div>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:12,lineHeight:1.6}}>Your Anthropic API key is stored only on this device. Change it here if needed.</div>
-        <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",fontFamily:"'Courier New',monospace",fontSize:12,color:"var(--text3)",marginBottom:10,letterSpacing:".05em"}}>
-          {localStorage.getItem("wd_apikey")?`${localStorage.getItem("wd_apikey").slice(0,14)}${"●".repeat(16)}`:"No key set"}
-        </div>
-        <button className="btn btn-ghost btn-full" onClick={()=>{if(window.confirm("Change your API key? You'll be taken back to the key entry screen.")){localStorage.removeItem("wd_apikey");onChangeKey();}}}>🔑 Change API Key</button>
       </div>
 
 
