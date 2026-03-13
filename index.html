@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,user-scalable=no"/>
+  <meta name="theme-color" content="#09090e"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="WorkDesk"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="description" content="WorkDesk — Your personalised work command centre"/>
+  <title>WorkDesk</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js" crossorigin></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html{height:100%;height:calc(var(--vh,1vh)*100);overflow:hidden;}
+    body{height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
+    #root{height:100%;}
+  </style>
+</head>
+<body>
+  <script>
+    function setVH(){var vh=window.innerHeight*.01;document.documentElement.style.setProperty('--vh',vh+'px');}
+    setVH();window.addEventListener('resize',setVH);
+    window.addEventListener('orientationchange',function(){setTimeout(setVH,200);});
+  </script>
+  <div id="root">
+    <div style="height:calc(var(--vh,1vh)*100);background:#09090e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+      <div style="width:64px;height:64px;background:linear-gradient(135deg,#e8c858,#a07818);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:32px;">⚡</div>
+      <div style="font-family:serif;font-size:26px;color:#e8c858;">WorkDesk</div>
+      <style>@keyframes sl{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}</style>
+      <div style="width:40px;height:3px;background:#1a1a28;border-radius:3px;overflow:hidden;">
+        <div style="height:100%;width:40%;background:#e8c858;border-radius:3px;animation:sl 1.2s ease-in-out infinite;"></div>
+      </div>
+    </div>
+  </div>
+
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+const uid=()=>Math.random().toString(36).slice(2,10);
+const fmtDate=s=>s?new Date(s+"T00:00:00").toLocaleDateString("en",{day:"numeric",month:"short"}):"";
+const fmtDateFull=s=>s?new Date(s+"T00:00:00").toLocaleDateString("en",{day:"numeric",month:"short",year:"numeric"}):"";
+function daysUntil(s){const t=new Date();t.setHours(0,0,0,0);return Math.ceil((new Date(s+"T00:00:00")-t)/86400000);}
+function dayLabel(d){
+  if(d<0)return{text:`${Math.abs(d)}d overdue`,color:"#FF5757"};
+  if(d===0)return{text:"Today",color:"#FF5757"};
+  if(d===1)return{text:"Tomorrow",color:"#FFB547"};
+  if(d<=7)return{text:`${d}d left`,color:"#FFB547"};
+  if(d<=30)return{text:`${d}d left`,color:"#57FF9C"};
+  return{text:`${d}d left`,color:"#666"};
+}
+function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`${r},${g},${b}`;}
+function fmtDuration(ms){const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);return h>0?`${h}h ${m%60}m`:`${m}m ${s%60}s`;}
+
+const load=(k,d)=>{try{const s=localStorage.getItem(k);return s?JSON.parse(s):d;}catch{return d;}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
+
+// ─── Defaults ────────────────────────────────────────────────────────────────
+const DEFAULT_SETTINGS={
+  name:"",company:"",currency:"$",appName:"WorkDesk",accentColor:"#e8c858",
+  darkMode:true,
+  // module labels — fully renameable
+  labels:{
+    home:"Home",tasks:"Tasks",renewals:"Renewals",clients:"Clients",
+    projects:"Projects",finances:"Finances",workflow:"Workflow",notes:"Notes",settings:"Settings"
+  },
+  // active nav modules
+  activeModules:["home","tasks","renewals","clients","workflow","settings"],
+  // dashboard widget visibility
+  dashWidgets:{stats:true,ai:true,overdue:true,today:true,upcoming:true,renewals:true,clients:false,notes:false},
+  // widget order (keys)
+  widgetOrder:["stats","ai","overdue","today","upcoming","renewals"],
+  // which stat cards to show
+  activeStats:["today","overdue","renewals","pending"],
+  // client types (user-defined)
+  clientTypes:[
+    {id:"ct1",label:"General",icon:"👤",color:"#9888f0",bg:"#1a1228"},
+    {id:"ct2",label:"VIP",icon:"⭐",color:"#e8c858",bg:"#1a1a08"},
+  ],
+};
+const DEFAULT_CATEGORIES=[
+  {id:"cat1",label:"Work",icon:"💼",color:"#38c3e8",bg:"#061a2a"},
+  {id:"cat2",label:"Personal",icon:"🏠",color:"#57ff9c",bg:"#082a14"},
+  {id:"cat3",label:"Finance",icon:"💰",color:"#e8a838",bg:"#2a1f06"},
+  {id:"cat4",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},
+];
+const DEFAULT_WORKFLOW_FIELDS=[
+  {key:"wf1",label:"Morning Routine",icon:"🌅"},
+  {key:"wf2",label:"Work Style",icon:"🧠"},
+  {key:"wf3",label:"Core Responsibilities",icon:"📋"},
+  {key:"wf4",label:"Billing & Payments",icon:"💰"},
+  {key:"wf5",label:"Communication Style",icon:"✉️"},
+  {key:"wf6",label:"Priority Rules",icon:"🎯"},
+  {key:"wf7",label:"Tools & Platforms",icon:"🔧"},
+  {key:"wf8",label:"Other Notes",icon:"📝"},
+];
+const PRIORITIES={
+  high:{label:"High",color:"#FF5757"},
+  medium:{label:"Medium",color:"#FFB547"},
+  low:{label:"Low",color:"#57FF9C"},
+};
+const ALL_STATS=[
+  {key:"today",icon:"📅",label:"Today"},
+  {key:"overdue",icon:"⚠️",label:"Overdue"},
+  {key:"renewals",icon:"🔄",label:"Renewals <30d"},
+  {key:"pending",icon:"📋",label:"Pending"},
+  {key:"clients",icon:"👥",label:"Active Clients"},
+  {key:"revenue",icon:"💰",label:"Est. Revenue"},
+];
+
+// ─── AI ──────────────────────────────────────────────────────────────────────
+async function callClaude(messages,system=""){
+  const res=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1200,system,messages}),
+  });
+  if(!res.ok)throw new Error("API error");
+  const data=await res.json();
+  return data.content?.map(b=>b.text||"").join("")||"No response.";
+}
+
+function buildSystemPrompt(tasks,clients,renewals,workflow,wfFields,settings,categories){
+  const today=new Date().toISOString().split("T")[0];
+  const cur=settings.currency||"$";
+  const name=settings.name?`for ${settings.name}`:"";
+  const company=settings.company?`at ${settings.company}`:"";
+  const wf=wfFields.filter(f=>workflow[f.key]?.trim()).map(f=>`${f.icon} ${f.label}:\n${workflow[f.key]}`).join("\n\n");
+  const catMap={};categories.forEach(c=>{catMap[c.id]=c.label;});
+  return `You are a personalised AI work assistant ${name} ${company}.
+TODAY: ${today}
+APP SETUP: The user calls their sections: Tasks="${settings.labels?.tasks||"Tasks"}", Clients="${settings.labels?.clients||"Clients"}", Renewals="${settings.labels?.renewals||"Renewals"}". Currency: ${cur}.
+WORKFLOW PROFILE:\n${wf||"Not configured yet — encourage user to fill in Workflow section."}
+CLIENTS:\n${clients.map(c=>`• ${c.name} (${c.email||"no email"})`).join("\n")||"None yet."}
+PENDING TASKS:\n${tasks.filter(t=>!t.done).map(t=>{const d=daysUntil(t.dueDate);const cl=clients.find(x=>x.id===t.clientId);return`• [${t.priority.toUpperCase()}] ${t.title} | Due ${t.dueDate} (${d>=0?d+"d left":Math.abs(d)+"d OVERDUE"})${cl?" | "+cl.name:""}`;}).join("\n")||"No pending tasks."}
+RENEWALS:\n${renewals.filter(r=>r.status!=="done"&&r.status!=="archived").map(r=>{const cl=clients.find(x=>x.id===r.clientId);const d=daysUntil(r.renewalDate);return`• ${r.service}${cl?" for "+cl.name:""} | ${r.renewalDate} (${d}d) | Bill: ${cur}${r.billingAmount} | Profit: ${cur}${r.billingAmount-r.cost}`;}).join("\n")||"No active renewals."}
+Be concise, practical, and personalised. Use the user's actual section names (not generic ones).`;
+}
+
+// ─── CSS ─────────────────────────────────────────────────────────────────────
+const buildCSS=(accent,dark)=>{
+  const a=accent||"#e8c858";
+  const aDim=a; // simplified — could compute darker
+  const bg=dark?"#09090e":"#f4f4fb";
+  const bg2=dark?"#111118":"#eaeaf4";
+  const bg3=dark?"#161620":"#e0e0ec";
+  const border=dark?"#1c1c28":"#d0d0e0";
+  const border2=dark?"#22223a":"#c0c0d4";
+  const text=dark?"#ddd8f4":"#1a1828";
+  const text2=dark?"#888":"#44445a";
+  const text3=dark?"#555":"#888898";
+  const inputBg=dark?"#0c0c14":"#f8f8ff";
+  const cardBg=dark?"#111118":"#ffffff";
+  const sidebarBg=dark?"#0c0c14":"#f0f0f8";
+  const modalBg=dark?"#111118":"#ffffff";
+  const aRgb=hexToRgb(a);
+return`
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+:root{
+  --bg:${bg};--bg2:${bg2};--bg3:${bg3};
+  --border:${border};--border2:${border2};
+  --accent:${a};--accent-dim:${aDim};--accent-rgb:${aRgb};
+  --text:${text};--text2:${text2};--text3:${text3};
+  --red:#ff5757;--green:#57ff9c;--blue:#38c3e8;
+  --ai:#6858c8;--ai-light:#9888f0;
+  --radius:12px;--radius-lg:16px;
+  --input-bg:${inputBg};--card-bg:${cardBg};--sidebar-bg:${sidebarBg};--modal-bg:${modalBg};
+}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:${dark?"#2a2a3a":"#ccc"};border-radius:4px;}
+.app{display:flex;height:100vh;height:calc(var(--vh,1vh)*100);width:100%;background:var(--bg);color:var(--text);font-family:'DM Sans','Segoe UI',sans-serif;overflow:hidden;position:relative;overscroll-behavior:none;}
+/* SIDEBAR */
+.sidebar{width:220px;flex-shrink:0;background:var(--sidebar-bg);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.sidebar-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sidebar-logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.sidebar-logo-text{font-family:'Playfair Display',serif;font-size:19px;color:var(--accent);}
+.sidebar-nav{flex:1;padding:12px 10px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:none;background:none;color:var(--text2);font-size:14px;font-weight:500;font-family:inherit;width:100%;text-align:left;transition:all .18s;}
+.sidebar-item:hover{background:var(--bg3);color:var(--text);}
+.sidebar-item.active{background:${dark?"linear-gradient(135deg,#1a1828,#12101e)":"linear-gradient(135deg,#e8e8f8,#dcdcf0)"};color:var(--accent);border:1px solid ${dark?"#28243a":"#c0c0d8"};}
+.sidebar-item .nav-icon{font-size:17px;flex-shrink:0;}
+.sidebar-footer{padding:12px 10px;border-top:1px solid var(--border);}
+.sidebar-time{font-size:12px;color:var(--text3);padding:8px 12px;background:var(--bg2);border-radius:8px;text-align:center;}
+.sidebar-ai-btn{width:100%;margin-top:8px;background:linear-gradient(135deg,#1c1440,#0e2840);color:var(--ai-light);border:1px solid #2c2060;border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
+.sidebar-ai-btn:hover{background:linear-gradient(135deg,#221850,#102e50);}
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.desktop-topbar{flex-shrink:0;height:56px;padding:0 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg);}
+.desktop-topbar-title{font-family:'Playfair Display',serif;font-size:20px;color:var(--text);}
+.desktop-content{flex:1;overflow-y:auto;padding:24px;overscroll-behavior-y:contain;}
+/* MOBILE */
+.mobile-topbar{display:none;flex-shrink:0;min-height:54px;height:auto;padding:max(env(safe-area-inset-top),8px) 16px 8px;background:var(--bg);border-bottom:1px solid var(--border);align-items:center;justify-content:space-between;z-index:10;}
+.mobile-scroll{display:none;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;padding:14px 16px 110px 16px;width:100%;}
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:${dark?"#0d0d16":sidebarBg};border-top:1px solid var(--border);padding:0 4px;padding-bottom:max(env(safe-area-inset-bottom),16px);z-index:50;min-height:60px;}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:var(--text3);cursor:pointer;padding:8px 2px;font-family:inherit;min-height:56px;-webkit-tap-highlight-color:transparent;}
+.tab-btn.active{color:var(--accent);}
+.tab-btn .tab-icon{font-size:20px;line-height:1;}
+.tab-btn .tab-label{font-size:10px;font-weight:600;}
+@media(max-width:768px){
+  .app{flex-direction:column!important;}
+  .mobile-topbar{display:flex!important;}
+  .mobile-scroll{display:block!important;overflow-x:hidden!important;}
+  .bottom-nav{display:flex!important;}
+  .sidebar{display:none!important;}
+  .main-area{display:none!important;}
+}
+@media(min-width:769px){
+  .mobile-topbar{display:none!important;}
+  .mobile-scroll{display:none!important;}
+  .bottom-nav{display:none!important;}
+  .sidebar{display:flex!important;}
+  .main-area{display:flex!important;}
+}
+/* CARDS */
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-bottom:10px;}
+.card-sm{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;}
+@media(max-width:768px){.stat-grid{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}.stat-card{padding:14px;}}
+.dash-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;}
+@media(max-width:768px){.dash-grid{display:block;}}
+.renewals-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:768px){.renewals-grid{grid-template-columns:1fr!important;}}
+.clients-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media(max-width:768px){.clients-grid{grid-template-columns:1fr!important;}}
+/* BUTTONS */
+.btn{border:none;cursor:pointer;border-radius:10px;font-size:14px;font-weight:600;padding:10px 16px;font-family:inherit;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;-webkit-tap-highlight-color:transparent;}
+.btn-accent{background:var(--accent);color:#0d0d10;}.btn-accent:active{opacity:.85;}
+.btn-gold{background:var(--accent);color:#0d0d10;}.btn-gold:active{opacity:.85;}
+.btn-ghost{background:${dark?"#161620":"#e8e8f0"};color:var(--text2);border:1px solid var(--border);}.btn-ghost:hover{background:var(--bg3);}
+.btn-red{background:${dark?"#1c1018":"#ffeaea"};color:#ff7070;border:1px solid ${dark?"#2c1822":"#ffcccc"};}
+.btn-ai{background:linear-gradient(135deg,#1c1440,#0e2840);color:var(--ai-light);border:1px solid #2c2060;}
+.btn-full{width:100%;}
+.btn-sm{font-size:12px;padding:7px 11px;}
+/* INPUTS */
+.input{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:14px;font-family:inherit;width:100%;outline:none;}
+.input:focus{border-color:var(--accent);}
+.select{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:14px;font-family:inherit;width:100%;outline:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;}
+.select:focus{border-color:var(--accent);}
+textarea.input{resize:none;min-height:76px;line-height:1.55;}
+.lbl{font-size:11px;color:var(--text3);font-weight:700;margin-bottom:5px;letter-spacing:.07em;text-transform:uppercase;}
+.pill{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+/* CHECKBOX */
+.cb{width:22px;height:22px;border-radius:6px;border:2px solid var(--border2);background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
+.cb.on{background:var(--accent);border-color:var(--accent);}
+/* SEC HEADER */
+.sec-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+.sec-bar{width:3px;border-radius:2px;height:18px;}
+.sec-title{font-family:'Playfair Display',serif;font-size:17px;color:var(--text);}
+/* AI PANEL */
+.ai-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;}
+.ai-panel{position:fixed;top:0;right:0;bottom:0;width:400px;background:${dark?"#0d0d16":sidebarBg};border-left:1px solid var(--border2);z-index:201;display:flex;flex-direction:column;}
+@media(max-width:768px){.ai-panel{top:auto;left:0;right:0;bottom:0;width:100%;height:88dvh;border-left:none;border-top:1px solid var(--border2);border-radius:20px 20px 0 0;}}
+.ai-handle{width:36px;height:4px;background:var(--border2);border-radius:4px;margin:10px auto 0;display:none;}
+@media(max-width:768px){.ai-handle{display:block;}}
+.ai-header{padding:14px 16px 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:10px;}
+.ai-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);}
+.ai-tab{flex:1;border:none;background:none;padding:11px 0;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;color:var(--text3);}
+.ai-bubble{border-radius:12px;padding:12px 14px;font-size:13.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;}
+.ai-bubble.user{background:${dark?"#16162a":"#ebebf8"};border:1px solid var(--border2);color:var(--text2);margin-left:24px;}
+.ai-bubble.assistant{background:${dark?"#121220":"#f0f0fa"};border:1px solid var(--border);color:var(--text);}
+.typing-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ai);animation:blink 1.2s infinite ease-in-out;}
+.typing-dot:nth-child(2){animation-delay:.2s;}.typing-dot:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.15;}40%{opacity:1;}}
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:flex-end;justify-content:center;}
+@media(min-width:769px){.modal-bg{align-items:center;}}
+.modal{background:var(--modal-bg);border:1px solid var(--border2);width:100%;max-height:94dvh;overflow-y:auto;padding:22px 18px;padding-bottom:calc(22px + env(safe-area-inset-bottom));}
+.modal-border-mobile{border-radius:20px 20px 0 0;}
+@media(min-width:769px){.modal{max-width:560px;border-radius:16px;padding:26px 24px;max-height:90vh;}.modal-border-mobile{border-radius:16px;}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+/* CHIPS */
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
+.chip{flex-shrink:0;border:1px solid var(--border);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:500;color:var(--text3);background:none;cursor:pointer;white-space:nowrap;font-family:inherit;}
+.chip.active{border-color:var(--accent);color:var(--accent);background:${dark?"#1a1a28":"#f0f0fc"};}
+/* RENEWAL COLS */
+.ren-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:8px 0;}
+.ren-col{background:${dark?"#08080d":bg3};border-radius:8px;padding:7px 8px;}
+/* WORKFLOW */
+.wf-card{background:${dark?"#0e0e18":bg2};border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px;}
+.wf-card.filled{border-color:${dark?"#1e2e1e":"#c0d8c0"};}
+.wf-bar-bg{height:5px;background:${dark?"#1a1a28":border};border-radius:5px;overflow:hidden;margin:8px 0;}
+.wf-bar{height:100%;border-radius:5px;transition:width .4s;}
+/* PAGE HEADERS */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;}
+.page-title{font-family:'Playfair Display',serif;font-size:24px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px;}
+/* QA GRID */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:0;}
+.qa-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;transition:border-color .2s;-webkit-tap-highlight-color:transparent;}
+.qa-btn:hover{border-color:var(--accent);}
+.qa-btn .qa-icon{font-size:22px;}
+.qa-btn .qa-label{font-size:12px;font-weight:600;color:var(--text2);}
+/* OFFLINE */
+.offline-banner{background:${dark?"#1a1008":"#fff8e8"};border-bottom:1px solid ${dark?"#2a1808":"#e8d890"};padding:5px 16px;font-size:12px;color:#e8a838;text-align:center;font-weight:600;flex-shrink:0;}
+/* FAB */
+.fab{position:fixed;bottom:calc(max(env(safe-area-inset-bottom),16px) + 68px);right:16px;background:var(--accent);color:#0d0d10;border:none;border-radius:20px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;z-index:40;opacity:0;pointer-events:none;transition:opacity .3s ease;font-family:inherit;}
+.fab.fab-visible{opacity:.75;pointer-events:all;}
+@media(min-width:769px){.fab{display:none;}}
+/* SUBTASK */
+.subtask-row{display:flex;align-items:center;gap:8px;padding:5px 0;}
+.subtask-check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;}
+.subtask-check.done{background:var(--accent);border-color:var(--accent);color:#0d0d10;}
+/* TIME TRACKER */
+.timer-btn{background:${dark?"#0e1a0e":"#e8f8e8"};border:1px solid ${dark?"#1a3a1a":"#c0e0c0"};color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.timer-running{background:${dark?"#1a0e0e":"#ffeaea"};border-color:${dark?"#3a1a1a":"#ffcccc"};color:var(--red);}
+/* TAGS */
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${dark?"#1a1a2a":"#e8e8f8"};color:var(--text2);}
+/* NOTES */
+.note-card{background:${dark?"#12120a":"#fffde8"};border:1px solid ${dark?"#2a2a10":"#e8e000"};border-radius:12px;padding:14px;margin-bottom:10px;}
+/* DRAG HANDLE */
+.drag-handle{cursor:grab;color:var(--text3);padding:4px;font-size:14px;line-height:1;}
+/* SETTINGS PANEL */
+.settings-section{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:14px;}
+.settings-section-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:14px;}
+/* TOGGLE SWITCH */
+.toggle{width:46px;height:26px;border-radius:13px;position:relative;transition:background .2s;cursor:pointer;flex-shrink:0;}
+.toggle-knob{position:absolute;top:3px;width:20px;height:20px;border-radius:10px;background:#fff;transition:left .2s;}
+/* ONBOARDING */
+.ob-step{text-align:center;padding:20px 10px;}
+.ob-title{font-family:'Playfair Display',serif;font-size:26px;color:var(--accent);margin-bottom:8px;}
+.ob-sub{font-size:14px;color:var(--text2);margin-bottom:28px;line-height:1.6;}
+.ob-option{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit;width:100%;transition:border-color .15s;}
+.ob-option:hover{border-color:var(--accent);}
+.ob-option.selected{border-color:var(--accent);background:${dark?"rgba(232,200,88,.06)":"rgba(232,200,88,.08)"};}
+.ob-opt-icon{font-size:28px;flex-shrink:0;}
+.ob-opt-label{font-size:14px;font-weight:600;color:var(--text);}
+.ob-opt-sub{font-size:12px;color:var(--text3);}
+/* IMPORT/EXPORT */
+.import-zone{border:2px dashed var(--border2);border-radius:12px;padding:30px;text-align:center;color:var(--text3);font-size:13px;cursor:pointer;transition:border-color .2s;}
+.import-zone:hover{border-color:var(--accent);}
+/* COLOR PICKER */
+.color-swatch{width:32px;height:32px;border-radius:8px;cursor:pointer;border:2px solid transparent;transition:border-color .15s;}
+.color-swatch.active{border-color:#fff;}
+`;
+};
+
+// ─── ONBOARDING WIZARD ───────────────────────────────────────────────────────
+const INDUSTRY_PRESETS=[
+  {id:"freelancer",icon:"💻",label:"Freelancer / Consultant",sub:"Design, dev, writing, marketing",
+    modules:["home","tasks","renewals","clients","finances","workflow","settings"],
+    labels:{tasks:"Jobs",clients:"Clients",renewals:"Contracts"},
+    cats:[{id:"cat1",label:"Design",icon:"🎨",color:"#e838a8",bg:"#2a0620"},{id:"cat2",label:"Development",icon:"💻",color:"#38c3e8",bg:"#061a2a"},{id:"cat3",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},{id:"cat4",label:"Marketing",icon:"📣",color:"#e8a838",bg:"#2a1f06"}]},
+  {id:"professional",icon:"💼",label:"Professional / Corporate",sub:"Accounting, law, consulting, finance",
+    modules:["home","tasks","renewals","clients","workflow","notes","settings"],
+    labels:{tasks:"Tasks",clients:"Clients",renewals:"Retainers"},
+    cats:[{id:"cat1",label:"Client Work",icon:"📋",color:"#e8a838",bg:"#2a1f06"},{id:"cat2",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},{id:"cat3",label:"Compliance",icon:"⚖️",color:"#38c3e8",bg:"#061a2a"},{id:"cat4",label:"Business Dev",icon:"🤝",color:"#9888f0",bg:"#1a1228"}]},
+  {id:"healthcare",icon:"🏥",label:"Healthcare / Wellness",sub:"Clinics, therapy, coaching, fitness",
+    modules:["home","tasks","clients","notes","workflow","settings"],
+    labels:{tasks:"Appointments",clients:"Patients",renewals:"Memberships"},
+    cats:[{id:"cat1",label:"Consultation",icon:"🩺",color:"#38c3e8",bg:"#061a2a"},{id:"cat2",label:"Follow-up",icon:"📞",color:"#e8a838",bg:"#2a1f06"},{id:"cat3",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},{id:"cat4",label:"Billing",icon:"💰",color:"#57ff9c",bg:"#082a14"}]},
+  {id:"creator",icon:"🎬",label:"Content Creator / Artist",sub:"Video, photography, music, art",
+    modules:["home","tasks","clients","finances","notes","workflow","settings"],
+    labels:{tasks:"Projects",clients:"Brands",renewals:"Subscriptions"},
+    cats:[{id:"cat1",label:"Shooting",icon:"📸",color:"#e838a8",bg:"#2a0620"},{id:"cat2",label:"Editing",icon:"✂️",color:"#9888f0",bg:"#1a1228"},{id:"cat3",label:"Deliveries",icon:"📦",color:"#38c3e8",bg:"#061a2a"},{id:"cat4",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"}]},
+  {id:"operations",icon:"⚙️",label:"Operations / Project Manager",sub:"Teams, processes, delivery, logistics",
+    modules:["home","tasks","projects","clients","workflow","notes","settings"],
+    labels:{tasks:"Tasks",clients:"Stakeholders",renewals:"SLAs"},
+    cats:[{id:"cat1",label:"Planning",icon:"📅",color:"#38c3e8",bg:"#061a2a"},{id:"cat2",label:"Execution",icon:"⚙️",color:"#e8a838",bg:"#2a1f06"},{id:"cat3",label:"Review",icon:"✅",color:"#57ff9c",bg:"#082a14"},{id:"cat4",label:"Escalation",icon:"🚨",color:"#ff5757",bg:"#200808"}]},
+  {id:"custom",icon:"✨",label:"Something Else",sub:"I'll customise everything myself",
+    modules:["home","tasks","clients","settings"],
+    labels:{tasks:"Tasks",clients:"Contacts",renewals:"Renewals"},
+    cats:[...DEFAULT_CATEGORIES]},
+];
+
+function OnboardingWizard({onComplete}){
+  const [step,setStep]=useState(0);
+  const [preset,setPreset]=useState(null);
+  const [name,setName]=useState("");
+  const [company,setCompany]=useState("");
+  const [currency,setCurrency]=useState("$");
+  const [accentColor,setAccentColor]=useState("#e8c858");
+  const ACCENT_OPTIONS=["#e8c858","#38c3e8","#57ff9c","#e838a8","#9888f0","#ff8857","#ff5757","#a8e838","#e8a838"];
+
+  function finish(){
+    const p=preset||INDUSTRY_PRESETS[5];
+    const labels={...DEFAULT_SETTINGS.labels,...p.labels};
+    onComplete({
+      settings:{
+        ...DEFAULT_SETTINGS,
+        name,company,currency,accentColor,
+        labels,
+        activeModules:p.modules,
+        dashWidgets:{stats:true,ai:true,overdue:true,today:true,upcoming:true,renewals:true,clients:false,notes:false},
+        widgetOrder:["stats","ai","overdue","today","upcoming","renewals"],
+        activeStats:["today","overdue","renewals","pending"],
+        clientTypes:DEFAULT_SETTINGS.clientTypes,
+      },
+      categories:p.cats,
+    });
+  }
+
+  const steps=[
+    // Step 0 — Industry
+    <div className="ob-step">
+      <div className="ob-title">Welcome to WorkDesk ⚡</div>
+      <div className="ob-sub">What best describes your work? We'll set everything up for you.</div>
+      {INDUSTRY_PRESETS.map(p=>(
+        <button key={p.id} className={`ob-option${preset?.id===p.id?" selected":""}`} onClick={()=>setPreset(p)}>
+          <span className="ob-opt-icon">{p.icon}</span>
+          <div><div className="ob-opt-label">{p.label}</div><div className="ob-opt-sub">{p.sub}</div></div>
+        </button>
+      ))}
+      <button className="btn btn-gold btn-full" style={{marginTop:16}} disabled={!preset} onClick={()=>setStep(1)}>Continue →</button>
+    </div>,
+    // Step 1 — Profile
+    <div className="ob-step" style={{textAlign:"left"}}>
+      <div className="ob-title" style={{textAlign:"center"}}>Your Profile</div>
+      <div className="ob-sub" style={{textAlign:"center"}}>So your AI assistant knows who it's working with.</div>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div><div className="lbl">Your Name</div><input className="input" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Sarah"/></div>
+        <div><div className="lbl">Company / Practice (optional)</div><input className="input" value={company} onChange={e=>setCompany(e.target.value)} placeholder="e.g. Studio Bloom"/></div>
+        <div><div className="lbl">Currency</div>
+          <select className="select" value={currency} onChange={e=>setCurrency(e.target.value)}>
+            {[["$","USD"],["RM","MYR"],["£","GBP"],["€","EUR"],["¥","JPY"],["₹","INR"],["A$","AUD"],["CHF","CHF"],["SGD","SGD"],["฿","THB"]].map(([v,l])=><option key={v} value={v}>{v} — {l}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:9,marginTop:20}}>
+        <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setStep(0)}>← Back</button>
+        <button className="btn btn-gold" style={{flex:2}} onClick={()=>setStep(2)}>Continue →</button>
+      </div>
+    </div>,
+    // Step 2 — Theme
+    <div className="ob-step">
+      <div className="ob-title">Pick Your Colour</div>
+      <div className="ob-sub">This becomes your accent throughout the whole app.</div>
+      <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap",marginBottom:24}}>
+        {ACCENT_OPTIONS.map(c=>(
+          <div key={c} className={`color-swatch${accentColor===c?" active":""}`} style={{background:c}} onClick={()=>setAccentColor(c)}/>
+        ))}
+      </div>
+      <div style={{background:"var(--card-bg)",border:"2px solid var(--border)",borderRadius:14,padding:"16px 20px",marginBottom:20,textAlign:"left"}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:accentColor,marginBottom:4}}>Preview</div>
+        <div style={{display:"flex",gap:8}}>
+          <div style={{background:accentColor,color:"#0d0d10",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:700}}>Button</div>
+          <div style={{border:`1px solid ${accentColor}`,color:accentColor,borderRadius:8,padding:"6px 14px",fontSize:13}}>Accent</div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:9}}>
+        <button className="btn btn-ghost" style={{flex:1}} onClick={()=>setStep(1)}>← Back</button>
+        <button className="btn btn-gold" style={{flex:2}} onClick={finish}>Launch WorkDesk ⚡</button>
+      </div>
+    </div>
+  ];
+
+  return(
+    <div style={{height:"calc(var(--vh,1vh)*100)",background:"#09090e",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div style={{width:"100%",maxWidth:480,background:"#111118",border:"1px solid #1c1c28",borderRadius:20,padding:"28px 24px",maxHeight:"94vh",overflowY:"auto"}}>
+        <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:20}}>
+          {[0,1,2].map(i=><div key={i} style={{width:i===step?24:8,height:8,borderRadius:4,background:i===step?"#e8c858":i<step?"#555":"#222",transition:"all .3s"}}/>)}
+        </div>
+        {steps[step]}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ────────────────────────────────────────────────────────────────
+function App(){
+  const [onboarded,setOnboarded]=useState(()=>!!load("wd_onboarded",false));
+  const [settings,setSettings]=useState(()=>load("wd_settings",DEFAULT_SETTINGS));
+  const [categories,setCategories]=useState(()=>load("wd_categories",DEFAULT_CATEGORIES));
+  const [tasks,setTasks]=useState(()=>load("wd_tasks",[]));
+  const [clients,setClients]=useState(()=>load("wd_clients",[]));
+  const [renewals,setRenewals]=useState(()=>load("wd_renewals",[]));
+  const [notes,setNotes]=useState(()=>load("wd_notes",[]));
+  const [workflow,setWorkflow]=useState(()=>load("wd_workflow",{}));
+  const [wfFields,setWfFields]=useState(()=>load("wd_wf_fields",DEFAULT_WORKFLOW_FIELDS));
+  const [view,setView]=useState(()=>localStorage.getItem("wd_view")||"home");
+  const [now,setNow]=useState(new Date());
+  const [filterCat,setFilterCat]=useState("all");
+  const [showAddTask,setShowAddTask]=useState(false);
+  const [showAddRenewal,setShowAddRenewal]=useState(false);
+  const [editRenewal,setEditRenewal]=useState(null);
+  const [renTab,setRenTab]=useState("active");
+  const [showAddClient,setShowAddClient]=useState(false);
+  const [editTask,setEditTask]=useState(null);
+  const [editClient,setEditClient]=useState(null);
+  const [aiOpen,setAiOpen]=useState(false);
+  const [aiTab,setAiTab]=useState("chat");
+  const [chatHistory,setChatHistory]=useState(()=>load("wd_chat",[{role:"assistant",content:"Hi! I'm your AI assistant. Ask me anything about your tasks, clients, or schedule. 👋"}]));
+  const [chatInput,setChatInput]=useState("");
+  const [aiLoading,setAiLoading]=useState(false);
+  const [briefing,setBriefing]=useState("");
+  const [emailDraft,setEmailDraft]=useState("");
+  const [emailCtx,setEmailCtx]=useState({clientId:"",purpose:""});
+  const [suggestions,setSuggestions]=useState([]);
+  const [wfEdits,setWfEdits]=useState({});
+  const [wfSaved,setWfSaved]=useState(false);
+  const [wfExpanded,setWfExpanded]=useState(null);
+  const chatEndRef=useRef(null);
+  const [searchQ,setSearchQ]=useState("");
+  const [bulkMode,setBulkMode]=useState(false);
+  const [bulkSel,setBulkSel]=useState([]);
+  const [renSort,setRenSort]=useState("date");
+  const [clientDetail,setClientDetail]=useState(null);
+  const [alerts,setAlerts]=useState([]);
+  const [shownAlerts,setShownAlerts]=useState(()=>load("wd_shown_alerts",[]));
+  const [showSettings,setShowSettings]=useState(false);
+  const [timers,setTimers]=useState(()=>load("wd_timers",{})); // taskId -> {start, total}
+  const [timerTick,setTimerTick]=useState(0);
+  const [showAddNote,setShowAddNote]=useState(false);
+  const [editNote,setEditNote]=useState(null);
+  const [showImportModal,setShowImportModal]=useState(false);
+  const [importType,setImportType]=useState("tasks");
+
+  // Live timer tick
+  useEffect(()=>{const t=setInterval(()=>{setTimerTick(x=>x+1);setNow(new Date());},1000);return()=>clearInterval(t);},[]);
+
+  // Persist everything
+  useEffect(()=>{save("wd_tasks",tasks);},[tasks]);
+  useEffect(()=>{save("wd_clients",clients);},[clients]);
+  useEffect(()=>{save("wd_renewals",renewals);},[renewals]);
+  useEffect(()=>{save("wd_notes",notes);},[notes]);
+  useEffect(()=>{save("wd_workflow",workflow);},[workflow]);
+  useEffect(()=>{save("wd_wf_fields",wfFields);},[wfFields]);
+  useEffect(()=>{save("wd_settings",settings);},[settings]);
+  useEffect(()=>{save("wd_categories",categories);},[categories]);
+  useEffect(()=>{save("wd_timers",timers);},[timers]);
+  useEffect(()=>{save("wd_chat",chatHistory.slice(-40));},[chatHistory]);
+  useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:"smooth"});},[chatHistory,aiLoading]);
+
+  // Alerts
+  useEffect(()=>{
+    const todayStr=new Date().toISOString().split("T")[0];
+    const newAlerts=[];
+    renewals.filter(r=>r.status!=="done"&&r.status!=="archived").forEach(r=>{
+      const d=daysUntil(r.renewalDate);
+      if(d<=7&&d>=0){
+        const key=`ren-${r.id}-${todayStr}`;
+        if(!shownAlerts.includes(key)){
+          const cl=clients.find(c=>c.id===r.clientId);
+          newAlerts.push({id:key,type:"warn",msg:`⚠️ ${r.service}${cl?" ("+cl.name+")":""} renews ${d===0?"today":d===1?"tomorrow":"in "+d+" days"}`});
+        }
+      }
+    });
+    const h=new Date().getHours();
+    const briefKey=`brief-${todayStr}`;
+    if(h>=9&&h<10&&!shownAlerts.includes(briefKey)){
+      const pending=tasks.filter(t=>!t.done).length;
+      const overdue=tasks.filter(t=>!t.done&&t.dueDate<todayStr).length;
+      newAlerts.unshift({id:briefKey,type:"brief",msg:`☀️ Good morning${settings.name?", "+settings.name:""}! ${pending} task${pending!==1?"s":""} pending${overdue>0?`, ${overdue} overdue`:""}.`});
+    }
+    if(newAlerts.length>0){
+      setAlerts(newAlerts);
+      const newShown=[...shownAlerts,...newAlerts.map(a=>a.id)];
+      setShownAlerts(newShown);
+      save("wd_shown_alerts",newShown.slice(-50));
+    }
+  },[]);
+
+  const dismissAlert=id=>setAlerts(a=>a.filter(x=>x.id!==id));
+  const changeView=v=>{setView(v);localStorage.setItem("wd_view",v);setSearchQ("");};
+
+  const today=now.toISOString().split("T")[0];
+  const hour=now.getHours();
+  const isOffice=hour>=9&&hour<18,isLunch=hour>=13&&hour<14;
+  const greet=hour<12?"Good morning":hour<18?"Good afternoon":"Good evening";
+  const todayTasks=tasks.filter(t=>t.dueDate===today&&!t.done);
+  const overdueTasks=tasks.filter(t=>t.dueDate<today&&!t.done);
+  const upcomingTasks=tasks.filter(t=>t.dueDate>today&&!t.done).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const urgentRenewals=renewals.filter(r=>daysUntil(r.renewalDate)<=30&&r.status!=="done"&&r.status!=="archived");
+  const cur=settings.currency||"$";
+  const labels=settings.labels||DEFAULT_SETTINGS.labels;
+
+  const catMap=useMemo(()=>{const m={};categories.forEach(c=>{m[c.id]=c;});return m;},[categories]);
+
+  // Timer helpers
+  const startTimer=taskId=>{
+    setTimers(t=>({...t,[taskId]:{...t[taskId],start:Date.now(),total:t[taskId]?.total||0}}));
+  };
+  const stopTimer=taskId=>{
+    setTimers(t=>{
+      const ti=t[taskId];
+      if(!ti||!ti.start)return t;
+      const elapsed=Date.now()-ti.start;
+      return{...t,[taskId]:{start:null,total:(ti.total||0)+elapsed}};
+    });
+  };
+  const getTimerDisplay=taskId=>{
+    const ti=timers[taskId];
+    if(!ti)return null;
+    const running=!!ti.start;
+    const total=(ti.total||0)+(running?Date.now()-ti.start:0);
+    return{running,display:fmtDuration(total),total};
+  };
+
+  // Tag helpers
+  const getAllTags=()=>{
+    const tags=new Set();
+    tasks.forEach(t=>(t.tags||[]).forEach(g=>tags.add(g)));
+    return [...tags];
+  };
+
+  // CRUD
+  const toggleDone=id=>setTasks(ts=>ts.map(t=>t.id===id?{...t,done:!t.done}:t));
+  const deleteTask=id=>{if(window.confirm("Delete this task?"))setTasks(ts=>ts.filter(t=>t.id!==id));};
+  const markRenDone=id=>setRenewals(rs=>rs.map(r=>r.id===id?{...r,status:"done"}:r));
+  const unmarkRenDone=id=>setRenewals(rs=>rs.map(r=>r.id===id?{...r,status:"upcoming"}:r));
+  const archiveRenewal=id=>setRenewals(rs=>rs.map(r=>r.id===id?{...r,status:"archived"}:r));
+  const deleteRenewal=id=>{if(window.confirm("Delete this renewal?"))setRenewals(rs=>rs.filter(r=>r.id!==id));};
+  const saveEditRenewal=(id,data)=>{setRenewals(rs=>rs.map(r=>r.id===id?{...r,...data}:r));setEditRenewal(null);};
+  const deleteClient=id=>{if(window.confirm("Delete this client? Their tasks and renewals will stay but become unlinked."))setClients(cs=>cs.filter(c=>c.id!==id));};
+  const bulkComplete=()=>{setTasks(ts=>ts.map(t=>bulkSel.includes(t.id)?{...t,done:true}:t));setBulkSel([]);setBulkMode(false);};
+  const toggleBulkSel=id=>setBulkSel(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
+  const toggleSubtask=(taskId,subId)=>{setTasks(ts=>ts.map(t=>t.id===taskId?{...t,subtasks:t.subtasks.map(s=>s.id===subId?{...s,done:!s.done}:s)}:t));};
+
+  const wfFilled=wfFields.filter(f=>workflow[f.key]?.trim()).length;
+  const wfPct=Math.round((wfFilled/Math.max(wfFields.length,1))*100);
+  const saveWorkflow=()=>{setWorkflow(w=>({...w,...wfEdits}));setWfEdits({});setWfSaved(true);setTimeout(()=>setWfSaved(false),2200);};
+
+  const filteredTasks=tasks.filter(t=>{
+    const q=searchQ.toLowerCase();
+    if(q&&!t.title.toLowerCase().includes(q)&&!t.notes?.toLowerCase().includes(q)&&!(t.tags||[]).some(g=>g.toLowerCase().includes(q)))return false;
+    if(filterCat==="all")return true;
+    if(filterCat==="done")return t.done;
+    return t.category===filterCat&&!t.done;
+  }).sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;return a.dueDate.localeCompare(b.dueDate);});
+
+  const sys=buildSystemPrompt(tasks,clients,renewals,workflow,wfFields,settings,categories);
+
+  // AI actions
+  const sendChat=async()=>{
+    if(!chatInput.trim()||aiLoading)return;
+    const userMsg={role:"user",content:chatInput.trim()};
+    const newHist=[...chatHistory,userMsg];
+    setChatHistory(newHist);setChatInput("");setAiLoading(true);
+    try{const r=await callClaude(newHist.map(m=>({role:m.role,content:m.content})),sys);setChatHistory(h=>[...h,{role:"assistant",content:r}]);}
+    catch{setChatHistory(h=>[...h,{role:"assistant",content:"Connection error. Check your API key or network."}]);}
+    setAiLoading(false);
+  };
+  const genBriefing=async()=>{
+    setAiLoading(true);setBriefing("");
+    try{const r=await callClaude([{role:"user",content:`Generate my personalised daily briefing for ${today}. Priority actions, overdue items, renewals, schedule overview.`}],sys);setBriefing(r);}
+    catch{setBriefing("Failed. Check connection.");}setAiLoading(false);
+  };
+  const genEmail=async()=>{
+    if(!emailCtx.clientId||!emailCtx.purpose)return;
+    const cl=clients.find(c=>c.id===emailCtx.clientId);
+    setAiLoading(true);setEmailDraft("");
+    try{const r=await callClaude([{role:"user",content:`Draft a professional email to ${cl.name}${cl.email?" ("+cl.email+")":""} for: "${emailCtx.purpose}". Match my communication style. Include subject line.`}],sys);setEmailDraft(r);}
+    catch{setEmailDraft("Connection error.");}setAiLoading(false);
+  };
+  const genSuggestions=async()=>{
+    setAiLoading(true);setSuggestions([]);
+    const catList=categories.map(c=>c.id).join("|");
+    try{
+      const r=await callClaude([{role:"user",content:`Suggest 5 tasks based on my workflow. Return ONLY JSON array: [{"title":"...","category":"${catList}","priority":"high|medium|low","dueDate":"YYYY-MM-DD","notes":"...","reason":"..."}]. Today is ${today}. Use category IDs exactly as listed.`}],sys);
+      setSuggestions(JSON.parse(r.replace(/```json|```/g,"").trim()));
+    }catch{setSuggestions([]);}setAiLoading(false);
+  };
+  const addSuggested=s=>{setTasks(ts=>[...ts,{...s,id:uid(),done:false,clientId:"",time:"",tags:[],subtasks:[]}]);setSuggestions(ss=>ss.filter(x=>x!==s));};
+  const openAI=(tab,cb)=>{setAiOpen(true);setAiTab(tab);if(tab==="email")setEmailDraft("");if(cb)cb();};
+
+  // Export
+  const exportData=(type)=>{
+    let data,filename;
+    if(type==="tasks"){
+      const rows=[["Title","Category","Priority","Due Date","Client","Notes","Done","Tags"],...tasks.map(t=>{const cl=clients.find(c=>c.id===t.clientId);const cat=catMap[t.category];return[t.title,cat?.label||t.category,t.priority,t.dueDate,cl?.name||"",t.notes||"",t.done?"Yes":"No",(t.tags||[]).join(";")];})];
+      data="data:text/csv;charset=utf-8,"+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+      filename="workdesk-tasks.csv";
+    }else if(type==="clients"){
+      const rows=[["Name","Email","Type","Phone","Notes"],...clients.map(c=>[c.name,c.email||"",c.type||"",c.phone||"",c.notes||""])];
+      data="data:text/csv;charset=utf-8,"+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+      filename="workdesk-clients.csv";
+    }else{
+      data="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify({tasks,clients,renewals,notes,settings,categories,workflow},null,2));
+      filename="workdesk-backup.json";
+    }
+    const a=document.createElement("a");a.href=data;a.download=filename;a.click();
+  };
+
+  // Import CSV
+  const handleImportCSV=(e,type)=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const lines=ev.target.result.split("\n").filter(l=>l.trim());
+      const headers=lines[0].split(",").map(h=>h.replace(/"/g,"").trim().toLowerCase());
+      const rows=lines.slice(1).map(line=>{
+        const vals=[];let cur="",inQ=false;
+        for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===","&&!inQ){vals.push(cur.replace(/"/g,""));cur="";}else cur+=ch;}
+        vals.push(cur.replace(/"/g,""));
+        const obj={};headers.forEach((h,i)=>{obj[h]=vals[i]||"";});
+        return obj;
+      });
+      if(type==="tasks"){
+        const imported=rows.filter(r=>r.title).map(r=>({
+          id:uid(),title:r.title||"",category:categories.find(c=>c.label.toLowerCase()===r.category?.toLowerCase())?.id||categories[0]?.id||"cat1",
+          priority:["high","medium","low"].includes(r.priority?.toLowerCase())?r.priority.toLowerCase():"medium",
+          dueDate:r["due date"]||r.duedate||r.due||today,time:r.time||"",clientId:"",notes:r.notes||"",
+          done:(r.done||"").toLowerCase()==="yes",tags:(r.tags||"").split(";").filter(Boolean),subtasks:[],
+        }));
+        setTasks(ts=>[...ts,...imported]);
+        alert(`✅ Imported ${imported.length} tasks.`);
+      }else if(type==="clients"){
+        const imported=rows.filter(r=>r.name).map(r=>({
+          id:uid(),name:r.name,email:r.email||"",phone:r.phone||"",
+          type:settings.clientTypes[0]?.id||"ct1",notes:r.notes||"",customFields:[],
+        }));
+        setClients(cs=>[...cs,...imported]);
+        alert(`✅ Imported ${imported.length} contacts.`);
+      }
+      setShowImportModal(false);
+    };
+    reader.readAsText(file);
+  };
+
+  const navItems=useMemo(()=>(settings.activeModules||DEFAULT_SETTINGS.activeModules).map(key=>({
+    key,icon:{home:"🏠",tasks:"✅",renewals:"🔄",clients:"👥",projects:"📁",finances:"💰",workflow:"🧠",notes:"📝",settings:"⚙️"}[key]||"📌",
+    label:labels[key]||key,
+  })),[settings.activeModules,labels]);
+
+  const statusColor=isLunch?"#ffb547":isOffice?"var(--green)":"var(--text3)";
+  const statusLabel=isLunch?"🍽 Lunch":isOffice?"🏢 In Office":"🌙 Off Hours";
+  const timeStr=now.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+
+  function renderStatCards(){
+    if(!settings.dashWidgets?.stats)return null;
+    const activeStats=settings.activeStats||["today","overdue","renewals","pending"];
+    const STAT_DEF={
+      today:{label:labels.tasks||"Tasks",v:todayTasks.length,c:"var(--accent)",i:"📅"},
+      overdue:{label:"Overdue",v:overdueTasks.length,c:"var(--red)",i:"⚠️"},
+      renewals:{label:labels.renewals||"Renewals",v:urgentRenewals.length,c:"var(--blue)",i:"🔄"},
+      pending:{label:"Pending",v:tasks.filter(t=>!t.done).length,c:"#a8e838",i:"📋"},
+      clients:{label:labels.clients||"Clients",v:clients.length,c:"var(--ai-light)",i:"👥"},
+      revenue:{label:"Est. Revenue",v:`${cur}${renewals.filter(r=>r.status!=="done").reduce((a,r)=>a+r.billingAmount,0)}`,c:"var(--green)",i:"💰",raw:true},
+    };
+    return(
+      <div className="stat-grid">
+        {activeStats.map(k=>{const s=STAT_DEF[k];if(!s)return null;return(
+          <div key={k} className="stat-card">
+            <div style={{fontSize:20,marginBottom:4}}>{s.i}</div>
+            <div style={{fontSize:28,fontWeight:700,color:s.c,fontFamily:"'Playfair Display',serif"}}>{s.v}</div>
+            <div style={{fontSize:11.5,color:"var(--text3)",marginTop:2}}>{s.label}</div>
+          </div>
+        );})}
+      </div>
+    );
+  }
+
+  const pageContent=(
+    <div>
+      {/* HOME */}
+      {view==="home"&&(
+        <div>
+          <div style={{marginBottom:20}}>
+            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(22px,4vw,28px)"}}>{greet}{settings.name?`, ${settings.name}`:""} 👋</h1>
+            <p style={{color:"var(--text3)",fontSize:13,marginTop:4}}>{now.toLocaleDateString("en",{weekday:"long",day:"numeric",month:"long"})}</p>
+          </div>
+          {renderStatCards()}
+          {settings.dashWidgets?.ai&&(
+            <div style={{background:settings.darkMode!==false?"linear-gradient(135deg,#0d0c1e,#080e18)":"var(--card-bg)",border:"1px solid",borderColor:settings.darkMode!==false?"#181830":"var(--border)",borderRadius:14,padding:"12px 14px",marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+                <span style={{background:"linear-gradient(135deg,#2a1f5a,#1a3a5a)",border:"1px solid #3a2a7a",borderRadius:12,padding:"2px 8px",fontSize:10,color:"#a090ff",fontWeight:700}}>✦ AI</span>
+                <span style={{fontSize:12,color:"var(--text3)"}}>Personalised to your workflow</span>
+              </div>
+              <div className="qa-grid">
+                <button className="qa-btn" onClick={()=>openAI("briefing",genBriefing)}><span className="qa-icon">📋</span><span className="qa-label">Daily Brief</span></button>
+                <button className="qa-btn" onClick={()=>openAI("suggest",genSuggestions)}><span className="qa-icon">💡</span><span className="qa-label">Suggest Tasks</span></button>
+                <button className="qa-btn" onClick={()=>openAI("email",null)}><span className="qa-icon">✉️</span><span className="qa-label">Draft Email</span></button>
+                <button className="qa-btn" onClick={()=>openAI("chat",null)}><span className="qa-icon">💬</span><span className="qa-label">Ask AI</span></button>
+              </div>
+            </div>
+          )}
+          <div className="dash-grid">
+            <div>
+              {settings.dashWidgets?.overdue&&overdueTasks.length>0&&(
+                <div style={{marginBottom:16}}>
+                  <div className="sec-head"><div className="sec-bar" style={{background:"var(--red)"}}/><span className="sec-title" style={{color:"#ff8080"}}>Overdue ({overdueTasks.length})</span></div>
+                  {overdueTasks.slice(0,4).map(t=><TaskRow key={t.id} task={t} clients={clients} categories={categories} catMap={catMap} onToggle={toggleDone} onDelete={deleteTask} onEdit={setEditTask} timerDisplay={getTimerDisplay(t.id)} onStartTimer={startTimer} onStopTimer={stopTimer}/>)}
+                </div>
+              )}
+              {settings.dashWidgets?.today&&(
+                <>
+                  <div className="sec-head"><div className="sec-bar" style={{background:"var(--accent)"}}/><span className="sec-title">Today</span></div>
+                  {todayTasks.length===0?<div style={{color:"var(--text3)",fontSize:13,padding:"10px 0"}}>No tasks due today ✅</div>
+                  :todayTasks.map(t=><TaskRow key={t.id} task={t} clients={clients} categories={categories} catMap={catMap} onToggle={toggleDone} onDelete={deleteTask} onEdit={setEditTask} timerDisplay={getTimerDisplay(t.id)} onStartTimer={startTimer} onStopTimer={stopTimer}/>)}
+                </>
+              )}
+              {settings.dashWidgets?.upcoming&&upcomingTasks.length>0&&(
+                <div style={{marginTop:16}}>
+                  <div className="sec-head"><div className="sec-bar" style={{background:"var(--blue)"}}/><span className="sec-title">Coming Up</span></div>
+                  {upcomingTasks.slice(0,4).map(t=><TaskRow key={t.id} task={t} clients={clients} categories={categories} catMap={catMap} onToggle={toggleDone} onDelete={deleteTask} onEdit={setEditTask} timerDisplay={getTimerDisplay(t.id)} onStartTimer={startTimer} onStopTimer={stopTimer}/>)}
+                </div>
+              )}
+            </div>
+            <div>
+              {settings.dashWidgets?.renewals&&urgentRenewals.length>0&&(
+                <div>
+                  <div className="sec-head"><div className="sec-bar" style={{background:"var(--blue)"}}/><span className="sec-title">Renewal Alerts</span></div>
+                  {urgentRenewals.slice(0,5).map(r=>{
+                    const cl=clients.find(c=>c.id===r.clientId);const dl=dayLabel(daysUntil(r.renewalDate));
+                    return(<div key={r.id} className="card-sm" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:600,fontSize:13.5,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.service}</div>
+                        <div style={{fontSize:12,color:"var(--text3)"}}>{cl?.name} · <span style={{color:"var(--green)",fontWeight:600}}>{cur}{r.billingAmount}</span></div>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:700,color:dl.color,flexShrink:0,marginLeft:8}}>{dl.text}</span>
+                    </div>);
+                  })}
+                </div>
+              )}
+              {settings.dashWidgets?.notes&&notes.length>0&&(
+                <div style={{marginTop:16}}>
+                  <div className="sec-head"><div className="sec-bar" style={{background:"#e8a838"}}/><span className="sec-title">Notes</span></div>
+                  {notes.filter(n=>n.pinned).slice(0,3).map(n=>(
+                    <div key={n.id} className="note-card" style={{fontSize:13,color:"var(--text2)"}}>
+                      <div style={{fontWeight:600,marginBottom:3}}>{n.title}</div>
+                      <div style={{fontSize:12,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{n.body}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TASKS */}
+      {view==="tasks"&&(
+        <div>
+          <div className="page-header">
+            <h1 className="page-title">{labels.tasks||"Tasks"}</h1>
+            <div style={{display:"flex",gap:6}}>
+              <button className="btn btn-ghost btn-sm" style={{color:bulkMode?"var(--accent)":"var(--text3)"}} onClick={()=>{setBulkMode(b=>!b);setBulkSel([]);}}>☑ Bulk</button>
+              <button className="btn btn-ai btn-sm" onClick={()=>openAI("suggest",genSuggestions)}>✦ AI</button>
+              <button className="btn btn-gold btn-sm" onClick={()=>setShowAddTask(true)}>+ Add</button>
+            </div>
+          </div>
+          {bulkMode&&bulkSel.length>0&&(
+            <div style={{display:"flex",gap:8,marginBottom:10,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",alignItems:"center"}}>
+              <span style={{flex:1,fontSize:13,color:"var(--green)"}}>{bulkSel.length} selected</span>
+              <button className="btn btn-ghost btn-sm" style={{color:"var(--green)"}} onClick={bulkComplete}>✓ Done</button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>{setBulkSel([]);setBulkMode(false);}}>Cancel</button>
+            </div>
+          )}
+          <div style={{marginBottom:12}}><input className="input" style={{fontSize:13}} placeholder="Search tasks, notes, tags…" value={searchQ} onChange={e=>setSearchQ(e.target.value)}/></div>
+          <div className="chips">
+            <button className={`chip${filterCat==="all"?" active":""}`} onClick={()=>setFilterCat("all")}>All</button>
+            <button className={`chip${filterCat==="done"?" active":""}`} onClick={()=>setFilterCat("done")}>Done ✓</button>
+            {categories.map(c=><button key={c.id} className={`chip${filterCat===c.id?" active":""}`} onClick={()=>setFilterCat(c.id)}>{c.icon} {c.label}</button>)}
+          </div>
+          {filteredTasks.length===0?<div style={{color:"var(--text3)",fontSize:14,padding:"24px 0",textAlign:"center"}}>No tasks here.</div>
+          :filteredTasks.map(t=>(
+            <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:8}}>
+              {bulkMode&&<div onClick={()=>toggleBulkSel(t.id)} style={{width:20,height:20,borderRadius:6,border:"2px solid",borderColor:bulkSel.includes(t.id)?"var(--green)":"var(--border)",background:bulkSel.includes(t.id)?"var(--green)":"transparent",flexShrink:0,marginTop:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#0d0d10",fontWeight:900}}>{bulkSel.includes(t.id)?"✓":""}</div>}
+              <div style={{flex:1}}><TaskRow task={t} clients={clients} categories={categories} catMap={catMap} onToggle={toggleDone} onDelete={deleteTask} onEdit={setEditTask} timerDisplay={getTimerDisplay(t.id)} onStartTimer={startTimer} onStopTimer={stopTimer} onToggleSubtask={toggleSubtask}/></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* RENEWALS */}
+      {view==="renewals"&&(
+        <div>
+          <div className="page-header">
+            <h1 className="page-title">{labels.renewals||"Renewals"}</h1>
+            <button className="btn btn-gold btn-sm" onClick={()=>setShowAddRenewal(true)}>+ Add</button>
+          </div>
+          {renTab==="active"&&(()=>{
+            const activeRens=renewals.filter(r=>r.status!=="done"&&r.status!=="archived");
+            const totalProfit=activeRens.reduce((a,r)=>a+(r.billingAmount-r.cost),0);
+            const totalBilling=activeRens.reduce((a,r)=>a+r.billingAmount,0);
+            return activeRens.length>0?(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:3}}>Total Billing</div>
+                  <div style={{fontSize:17,fontWeight:700,color:"var(--green)"}}>{cur}{totalBilling}</div>
+                </div>
+                <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:3}}>Total Profit</div>
+                  <div style={{fontSize:17,fontWeight:700,color:"var(--accent)"}}>{cur}{totalProfit}</div>
+                </div>
+              </div>
+            ):null;
+          })()}
+          <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <input className="input" style={{flex:1,fontSize:13}} placeholder="Search…" value={searchQ} onChange={e=>setSearchQ(e.target.value)}/>
+            <select className="select" style={{width:"auto",fontSize:12,padding:"8px 10px"}} value={renSort} onChange={e=>setRenSort(e.target.value)}>
+              <option value="date">By date</option><option value="profit">By profit</option><option value="billing">By billing</option><option value="client">By client</option>
+            </select>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:14,paddingBottom:12,borderBottom:"1px solid var(--border)"}}>
+            {[["active","Active"],["done","Done ✓"],["archived","🗄 Archive"]].map(([k,lbl])=>(
+              <button key={k} onClick={()=>setRenTab(k)} style={{padding:"7px 18px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:"none",background:renTab===k?"var(--accent)":"var(--card-bg)",color:renTab===k?"#0d0d10":"var(--text3)"}}>{lbl}{k==="done"&&renewals.filter(r=>r.status==="done").length>0?` (${renewals.filter(r=>r.status==="done").length})`:""}</button>
+            ))}
+          </div>
+          <div className="renewals-grid">
+            {renewals.filter(r=>{
+              const q=searchQ.toLowerCase();
+              if(q&&!r.service.toLowerCase().includes(q)&&!(clients.find(c=>c.id===r.clientId)?.name||"").toLowerCase().includes(q))return false;
+              if(renTab==="active")return r.status!=="done"&&r.status!=="archived";
+              if(renTab==="done")return r.status==="done";
+              return r.status==="archived";
+            }).sort((a,b)=>{
+              if(renSort==="profit")return(b.billingAmount-b.cost)-(a.billingAmount-a.cost);
+              if(renSort==="billing")return b.billingAmount-a.billingAmount;
+              if(renSort==="client"){const ca=clients.find(c=>c.id===a.clientId)?.name||"";const cb=clients.find(c=>c.id===b.clientId)?.name||"";return ca.localeCompare(cb);}
+              return a.renewalDate.localeCompare(b.renewalDate);
+            }).map(r=>{
+              const cl=clients.find(c=>c.id===r.clientId);
+              const d=daysUntil(r.renewalDate);const dl=dayLabel(d);const done=r.status==="done";
+              return(
+                <div key={r.id} className="card" style={{opacity:done?.5:1,borderColor:d<=7&&!done?"#2e1a1a":"var(--border)",marginBottom:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                    <div style={{flex:1,minWidth:0,marginRight:8}}>
+                      <div style={{fontWeight:600,fontSize:15,marginBottom:2,textDecoration:done?"line-through":"none"}}>{r.service}</div>
+                      <div style={{fontSize:13,color:"var(--text3)"}}>{cl?.name}</div>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:700,color:done?"var(--green)":dl.color,background:"var(--bg3)",padding:"3px 9px",borderRadius:12,flexShrink:0}}>{done?"✓ Done":dl.text}</span>
+                  </div>
+                  <div className="ren-cols">
+                    {[["Cost",`${cur}${r.cost}`,"#ff7070"],["Billing",`${cur}${r.billingAmount}`,"var(--green)"],["Profit",`${cur}${r.billingAmount-r.cost}`,"var(--accent)"]].map(([l,v,c])=>(
+                      <div key={l} className="ren-col"><div className="lbl">{l}</div><div style={{fontWeight:700,color:done?"var(--text3)":c,fontSize:14}}>{v}</div></div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>📅 {fmtDateFull(r.renewalDate)}{r.notes?` · ${r.notes}`:""}</div>
+                  {!done&&r.status!=="archived"&&(
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button className="btn btn-ai btn-sm" style={{flex:1}} onClick={()=>{openAI("email",null);setEmailCtx({clientId:r.clientId,purpose:`Send renewal invoice for ${r.service}, billing ${cur}${r.billingAmount}`});}}>✦ Email</button>
+                      <button className="btn btn-ghost btn-sm" style={{flex:1}} onClick={()=>markRenDone(r.id)}>✓ Done</button>
+                      <button className="btn btn-ghost btn-sm" style={{padding:"7px 10px",color:"var(--accent)"}} onClick={()=>setEditRenewal(r)}>✏️</button>
+                      <button className="btn btn-red btn-sm" style={{padding:"7px 10px"}} onClick={()=>deleteRenewal(r.id)}>🗑</button>
+                    </div>
+                  )}
+                  {done&&(
+                    <div style={{display:"flex",gap:6}}>
+                      <button className="btn btn-ghost btn-sm" style={{flex:1}} onClick={()=>unmarkRenDone(r.id)}>↩ Restore</button>
+                      <button className="btn btn-ghost btn-sm" style={{fontSize:11}} onClick={()=>archiveRenewal(r.id)}>🗄 Archive</button>
+                    </div>
+                  )}
+                  {r.status==="archived"&&(
+                    <div style={{display:"flex",gap:6}}>
+                      <button className="btn btn-ghost btn-sm" style={{flex:1}} onClick={()=>unmarkRenDone(r.id)}>↩ Restore</button>
+                      <button className="btn btn-red btn-sm" style={{padding:"7px 10px"}} onClick={()=>deleteRenewal(r.id)}>🗑</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {renewals.filter(r=>renTab==="active"?r.status!=="done"&&r.status!=="archived":r.status===renTab).length===0&&(
+              <div style={{gridColumn:"1/-1",textAlign:"center",padding:"40px 0",color:"var(--text3)",fontSize:14}}>
+                {renTab==="active"?"No active renewals — tap + Add":renTab==="done"?"No completed renewals":"Archive is empty"}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CLIENTS */}
+      {view==="clients"&&!clientDetail&&(
+        <div>
+          <div className="page-header">
+            <h1 className="page-title">{labels.clients||"Clients"}</h1>
+            <button className="btn btn-gold btn-sm" onClick={()=>setShowAddClient(true)}>+ Add</button>
+          </div>
+          <div style={{marginBottom:12}}><input className="input" style={{fontSize:13}} placeholder={`Search ${labels.clients||"clients"}…`} value={searchQ} onChange={e=>setSearchQ(e.target.value)}/></div>
+          <div className="clients-grid">
+            {clients.filter(c=>!searchQ||c.name.toLowerCase().includes(searchQ.toLowerCase())||c.email?.toLowerCase().includes(searchQ.toLowerCase())).map(c=>{
+              const cT=tasks.filter(t=>t.clientId===c.id&&!t.done);
+              const cR=renewals.filter(r=>r.clientId===c.id&&r.status!=="done");
+              const tot=renewals.filter(r=>r.clientId===c.id).reduce((a,r)=>a+r.billingAmount,0);
+              const ctype=settings.clientTypes?.find(ct=>ct.id===c.type)||settings.clientTypes?.[0];
+              return(
+                <div key={c.id} className="card" style={{marginBottom:0,cursor:"pointer"}} onClick={()=>setClientDetail(c)}>
+                  <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:12}}>
+                    <div style={{width:42,height:42,borderRadius:12,background:ctype?.bg||"#1a1228",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{ctype?.icon||"👤"}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{ctype?.label||""}</div>
+                    </div>
+                  </div>
+                  {/* Custom fields preview */}
+                  {(c.customFields||[]).slice(0,2).map(f=>(
+                    <div key={f.id} style={{fontSize:12,color:"var(--text3)",marginBottom:3}}><span style={{color:"var(--text2)"}}>{f.label}:</span> {f.value}</div>
+                  ))}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,margin:"10px 0"}}>
+                    <div style={{background:"var(--bg3)",borderRadius:8,padding:"8px 10px"}}><div className="lbl">Tasks</div><div style={{fontWeight:700,color:"var(--accent)"}}>{cT.length}</div></div>
+                    <div style={{background:"var(--bg3)",borderRadius:8,padding:"8px 10px"}}><div className="lbl">Active</div><div style={{fontWeight:700,color:"var(--blue)"}}>{cR.length}</div></div>
+                    <div style={{background:"var(--bg3)",borderRadius:8,padding:"8px 10px"}}><div className="lbl">Billed</div><div style={{fontWeight:700,color:"var(--green)",fontSize:12}}>{cur}{tot}</div></div>
+                  </div>
+                  <div style={{display:"flex",gap:7}} onClick={e=>e.stopPropagation()}>
+                    <button className="btn btn-ai btn-sm" style={{flex:2}} onClick={()=>{openAI("email",null);setEmailCtx({clientId:c.id,purpose:""});}}>✦ Email</button>
+                    <button className="btn btn-ghost btn-sm" style={{flex:1}} onClick={()=>setEditClient(c)}>✏️</button>
+                    <button className="btn btn-red btn-sm" style={{flex:1,padding:"7px 8px"}} onClick={()=>deleteClient(c.id)}>🗑</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* CLIENT DETAIL */}
+      {view==="clients"&&clientDetail&&(()=>{
+        const c=clientDetail;
+        const cTasks=tasks.filter(t=>t.clientId===c.id);
+        const cRens=renewals.filter(r=>r.clientId===c.id);
+        const totalBilled=cRens.reduce((a,r)=>a+r.billingAmount,0);
+        const totalProfit=cRens.reduce((a,r)=>a+(r.billingAmount-r.cost),0);
+        const ctype=settings.clientTypes?.find(ct=>ct.id===c.type)||settings.clientTypes?.[0];
+        return(
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setClientDetail(null)}>← Back</button>
+              <h1 className="page-title" style={{margin:0,flex:1}}>{c.name}</h1>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setEditClient(c)}>✏️</button>
+            </div>
+            <div className="card" style={{marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                <div style={{width:48,height:48,borderRadius:14,background:ctype?.bg||"#1a1228",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{ctype?.icon||"👤"}</div>
+                <div>
+                  <div style={{fontWeight:700,fontSize:17}}>{c.name}</div>
+                  <div style={{fontSize:13,color:"var(--text3)"}}>{c.email||"No email"}</div>
+                  {c.phone&&<div style={{fontSize:13,color:"var(--text3)"}}>{c.phone}</div>}
+                  <div style={{fontSize:11,color:ctype?.color||"var(--ai-light)",marginTop:2}}>{ctype?.label||""}</div>
+                </div>
+              </div>
+              {/* Custom fields */}
+              {(c.customFields||[]).length>0&&(
+                <div style={{borderTop:"1px solid var(--border)",paddingTop:10,marginTop:4,marginBottom:10}}>
+                  <div className="lbl" style={{marginBottom:8}}>Details</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                    {c.customFields.map(f=>(
+                      <div key={f.id} style={{fontSize:13}}>
+                        <span style={{color:"var(--text3)"}}>{f.label}: </span>
+                        <span style={{fontWeight:600}}>{f.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div style={{background:"var(--bg3)",borderRadius:8,padding:"10px 12px"}}><div style={{fontSize:11,color:"var(--text3)"}}>Total Billed</div><div style={{fontSize:18,fontWeight:700,color:"var(--green)"}}>{cur}{totalBilled}</div></div>
+                <div style={{background:"var(--bg3)",borderRadius:8,padding:"10px 12px"}}><div style={{fontSize:11,color:"var(--text3)"}}>Total Profit</div><div style={{fontSize:18,fontWeight:700,color:"var(--accent)"}}>{cur}{totalProfit}</div></div>
+              </div>
+              {c.notes&&<div style={{marginTop:10,fontSize:13,color:"var(--text2)",background:"var(--bg3)",borderRadius:8,padding:"10px 12px"}}>{c.notes}</div>}
+              <button className="btn btn-ai btn-full" style={{marginTop:10}} onClick={()=>{openAI("email",null);setEmailCtx({clientId:c.id,purpose:""});}}>✦ Draft Email</button>
+            </div>
+            <div style={{marginBottom:16}}>
+              <div className="sec-head" style={{marginBottom:8}}><div className="sec-bar" style={{background:"var(--accent)"}}/><span className="sec-title">{labels.tasks||"Tasks"} ({cTasks.filter(t=>!t.done).length} active)</span></div>
+              {cTasks.length===0?<div style={{color:"var(--text3)",fontSize:13}}>None yet.</div>
+              :cTasks.sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(t=><TaskRow key={t.id} task={t} clients={clients} categories={categories} catMap={catMap} onToggle={toggleDone} onDelete={deleteTask} onEdit={setEditTask} timerDisplay={getTimerDisplay(t.id)} onStartTimer={startTimer} onStopTimer={stopTimer}/>)}
+            </div>
+            <div>
+              <div className="sec-head" style={{marginBottom:8}}><div className="sec-bar" style={{background:"var(--blue)"}}/><span className="sec-title">{labels.renewals||"Renewals"} ({cRens.filter(r=>r.status!=="done").length} active)</span></div>
+              {cRens.length===0?<div style={{color:"var(--text3)",fontSize:13}}>None yet.</div>
+              :cRens.map(r=>{const d=daysUntil(r.renewalDate);const dl=dayLabel(d);const done=r.status==="done";return(
+                <div key={r.id} className="card" style={{opacity:done?.5:1,marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                    <div style={{fontWeight:600,fontSize:14,textDecoration:done?"line-through":"none"}}>{r.service}</div>
+                    <span style={{fontSize:12,fontWeight:700,color:done?"var(--green)":dl.color}}>{done?"✓ Done":dl.text}</span>
+                  </div>
+                  <div className="ren-cols">{[["Cost",`${cur}${r.cost}`,"#ff7070"],["Billing",`${cur}${r.billingAmount}`,"var(--green)"],["Profit",`${cur}${r.billingAmount-r.cost}`,"var(--accent)"]].map(([l,v,c2])=>(<div key={l} className="ren-col"><div className="lbl">{l}</div><div style={{fontWeight:700,color:done?"var(--text3)":c2,fontSize:13}}>{v}</div></div>))}</div>
+                  <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>📅 {fmtDateFull(r.renewalDate)}{r.notes?` · ${r.notes}`:""}</div>
+                </div>
+              );})}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* WORKFLOW */}
+      {view==="workflow"&&(
+        <div>
+          <div className="page-header"><h1 className="page-title">🧠 {labels.workflow||"Workflow"}</h1></div>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:600,color:wfPct>=80?"#60c860":wfPct>=40?"#e8a838":"#c85050"}}>AI Profile {wfPct}% complete</span>
+              <span style={{fontSize:12,color:"var(--text3)"}}>{wfFilled}/{wfFields.length} filled</span>
+            </div>
+            <div className="wf-bar-bg"><div className="wf-bar" style={{width:`${wfPct}%`,background:wfPct>=80?"linear-gradient(90deg,#40a840,#60c860)":wfPct>=40?"linear-gradient(90deg,#c88020,#e8a838)":"linear-gradient(90deg,#a82020,#c84040)"}}/></div>
+            {Object.keys(wfEdits).length>0&&<button className="btn btn-ghost btn-full btn-sm" style={{marginTop:10,color:"#60d060",borderColor:"#2a3a2a"}} onClick={saveWorkflow}>💾 Save Changes</button>}
+            {wfSaved&&Object.keys(wfEdits).length===0&&<div style={{fontSize:12,color:"#60c860",textAlign:"center",marginTop:8}}>✓ Saved!</div>}
+          </div>
+          {wfFields.map(field=>{
+            const current=wfEdits[field.key]!==undefined?wfEdits[field.key]:(workflow[field.key]||"");
+            const isFilled=current.trim().length>0;
+            const isExp=wfExpanded===field.key;
+            return(
+              <div key={field.key} className={`wf-card${isFilled?" filled":""}`}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>setWfExpanded(isExp?null:field.key)}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:18}}>{field.icon}</span>
+                    <span style={{fontWeight:600,fontSize:14}}>{field.label}</span>
+                    {isFilled&&<span style={{fontSize:10,background:"var(--bg3)",color:"var(--green)",border:"1px solid var(--border)",borderRadius:10,padding:"1px 7px",fontWeight:700}}>✓</span>}
+                  </div>
+                  <span style={{fontSize:14,color:"var(--text3)",transform:isExp?"rotate(180deg)":"none",display:"inline-block",transition:"transform .2s"}}>▾</span>
+                </div>
+                {isExp&&(
+                  <div style={{marginTop:10}}>
+                    <textarea className="input" style={{fontSize:13.5}} value={current} placeholder={`Describe your ${field.label.toLowerCase()}…`} onChange={e=>setWfEdits(ed=>({...ed,[field.key]:e.target.value}))}/>
+                    {Object.keys(wfEdits).length>0&&<button className="btn btn-ghost btn-full btn-sm" style={{marginTop:8,color:"#60d060",borderColor:"#2a3a2a"}} onClick={saveWorkflow}>💾 Save</button>}
+                  </div>
+                )}
+                {!isExp&&isFilled&&<div style={{fontSize:12,color:"var(--text3)",marginTop:6,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{current}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* NOTES */}
+      {view==="notes"&&(
+        <div>
+          <div className="page-header">
+            <h1 className="page-title">{labels.notes||"Notes"}</h1>
+            <button className="btn btn-gold btn-sm" onClick={()=>setShowAddNote(true)}>+ Add</button>
+          </div>
+          <div style={{marginBottom:12}}><input className="input" style={{fontSize:13}} placeholder="Search notes…" value={searchQ} onChange={e=>setSearchQ(e.target.value)}/></div>
+          {notes.filter(n=>!searchQ||n.title.toLowerCase().includes(searchQ.toLowerCase())||n.body.toLowerCase().includes(searchQ.toLowerCase())).sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)).map(n=>(
+            <div key={n.id} className="note-card">
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <div style={{fontWeight:700,fontSize:14,flex:1}}>{n.pinned?"📌 ":""}{n.title}</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-ghost btn-sm" style={{padding:"4px 8px",fontSize:11,color:n.pinned?"var(--accent)":"var(--text3)"}} onClick={()=>setNotes(ns=>ns.map(x=>x.id===n.id?{...x,pinned:!x.pinned}:x))}>📌</button>
+                  <button className="btn btn-ghost btn-sm" style={{padding:"4px 8px",fontSize:11}} onClick={()=>setEditNote(n)}>✏️</button>
+                  <button className="btn btn-red btn-sm" style={{padding:"4px 8px",fontSize:11}} onClick={()=>{if(window.confirm("Delete note?"))setNotes(ns=>ns.filter(x=>x.id!==n.id));}}>✕</button>
+                </div>
+              </div>
+              <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{n.body}</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:8}}>{new Date(n.createdAt).toLocaleDateString("en",{day:"numeric",month:"short",year:"numeric"})}</div>
+            </div>
+          ))}
+          {notes.length===0&&<div style={{color:"var(--text3)",fontSize:14,padding:"24px 0",textAlign:"center"}}>No notes yet — tap + Add</div>}
+        </div>
+      )}
+
+      {/* SETTINGS */}
+      {view==="settings"&&(
+        <SettingsView
+          settings={settings} setSettings={setSettings}
+          categories={categories} setCategories={setCategories}
+          wfFields={wfFields} setWfFields={setWfFields}
+          clients={clients} tasks={tasks} renewals={renewals}
+          onExport={exportData} onImport={()=>setShowImportModal(true)}
+          cur={cur} labels={labels}
+        />
+      )}
+    </div>
+  );
+
+  const viewTitle=navItems.find(n=>n.key===view)?.label||settings.appName||"WorkDesk";
+  const appName=settings.appName||"WorkDesk";
+
+  if(!onboarded){
+    return(
+      <>
+        <style>{buildCSS(DEFAULT_SETTINGS.accentColor,true)}</style>
+        <OnboardingWizard onComplete={({settings:s,categories:c})=>{
+          setSettings(s);setCategories(c);setOnboarded(true);save("wd_onboarded",true);
+          save("wd_settings",s);save("wd_categories",c);
+        }}/>
+      </>
+    );
+  }
+
+  return(
+    <div className="app">
+      <style>{buildCSS(settings.accentColor||"#e8c858",settings.darkMode!==false)}</style>
+
+      {/* DESKTOP SIDEBAR */}
+      <nav className="sidebar">
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-icon">⚡</div>
+          <span className="sidebar-logo-text">{appName}</span>
+        </div>
+        <div className="sidebar-nav">
+          {navItems.map(n=>(
+            <button key={n.key} className={`sidebar-item${view===n.key?" active":""}`} onClick={()=>changeView(n.key)}>
+              <span className="nav-icon">{n.icon}</span>{n.label}
+            </button>
+          ))}
+        </div>
+        <div className="sidebar-footer">
+          <div className="sidebar-time"><span style={{color:statusColor}}>{statusLabel}</span><span style={{color:"var(--text3)",marginLeft:6}}>{timeStr}</span></div>
+          <button className="sidebar-ai-btn" onClick={()=>setAiOpen(o=>!o)}>
+            ✦ AI Assistant
+            <span style={{fontSize:10,background:"rgba(255,255,255,.08)",borderRadius:8,padding:"1px 6px",color:wfPct>=80?"#60c860":"#887030"}}>{wfPct}%</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* DESKTOP MAIN */}
+      <div className="main-area">
+        {alerts.map(a=>(
+          <div key={a.id} style={{padding:"9px 24px",background:a.type==="brief"?"var(--bg3)":"#1a0e0a",borderBottom:`1px solid ${a.type==="brief"?"var(--border)":"#3a1a0a"}`,display:"flex",alignItems:"center",gap:10}}>
+            <span style={{flex:1,fontSize:13,color:a.type==="brief"?"var(--blue)":"#ffb060"}}>{a.msg}</span>
+            <button onClick={()=>dismissAlert(a.id)} style={{background:"none",border:"none",color:"#555",fontSize:16,cursor:"pointer",padding:"0 4px"}}>✕</button>
+          </div>
+        ))}
+        <div className="desktop-topbar">
+          <span className="desktop-topbar-title">{viewTitle}</span>
+          <div style={{display:"flex",gap:8}}>
+            {(view==="tasks"||view==="renewals"||view==="clients"||view==="notes")&&(
+              <button className="btn btn-gold btn-sm" onClick={()=>{
+                if(view==="tasks")setShowAddTask(true);
+                else if(view==="renewals")setShowAddRenewal(true);
+                else if(view==="clients")setShowAddClient(true);
+                else setShowAddNote(true);
+              }}>+ Add</button>
+            )}
+          </div>
+        </div>
+        <div className="desktop-content">{pageContent}</div>
+      </div>
+
+      {/* MOBILE TOPBAR */}
+      <div className="mobile-topbar">
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:28,height:28,background:`linear-gradient(135deg,${settings.accentColor||"#e8c858"},#a07818)`,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>⚡</div>
+          <span style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:"var(--accent)"}}>{appName}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          <span style={{fontSize:11,color:statusColor,background:"var(--bg2)",border:"1px solid var(--border)",padding:"3px 8px",borderRadius:10,fontWeight:600}}>{statusLabel} {timeStr}</span>
+          <button className="btn btn-ai" style={{padding:"6px 11px",fontSize:12}} onClick={()=>setAiOpen(o=>!o)}>✦ AI</button>
+        </div>
+      </div>
+
+      <div className="mobile-scroll">
+        {alerts.map(a=>(
+          <div key={a.id} style={{margin:"-14px -16px 14px",padding:"11px 14px",background:a.type==="brief"?"var(--bg3)":"#1a0e0a",borderBottom:`1px solid ${a.type==="brief"?"var(--border)":"#3a1a0a"}`,display:"flex",alignItems:"flex-start",gap:10}}>
+            <span style={{flex:1,fontSize:12.5,color:a.type==="brief"?"var(--blue)":"#ffb060",lineHeight:1.5}}>{a.msg}</span>
+            <button onClick={()=>dismissAlert(a.id)} style={{background:"none",border:"none",color:"#444",fontSize:16,cursor:"pointer",padding:"0 2px",flexShrink:0}}>✕</button>
+          </div>
+        ))}
+        {pageContent}
+      </div>
+
+      <nav className="bottom-nav">
+        {navItems.map(n=>{
+          const badge=n.key==="tasks"?overdueTasks.length:n.key==="renewals"?urgentRenewals.filter(r=>daysUntil(r.renewalDate)<=7).length:0;
+          return(
+            <button key={n.key} className={`tab-btn${view===n.key?" active":""}`} onClick={()=>changeView(n.key)} style={{position:"relative"}}>
+              <span className="tab-icon">{n.icon}</span>
+              {badge>0&&<span style={{position:"absolute",top:6,right:"50%",transform:"translateX(14px)",background:"var(--red)",color:"#fff",borderRadius:8,fontSize:9,fontWeight:700,padding:"1px 5px",minWidth:16,textAlign:"center"}}>{badge}</span>}
+              <span className="tab-label">{n.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {!aiOpen&&(view==="tasks"||view==="renewals"||view==="clients"||view==="notes")&&(
+        <button className="fab fab-visible" id="fab-add" onClick={()=>{
+          if(view==="tasks")setShowAddTask(true);
+          else if(view==="renewals")setShowAddRenewal(true);
+          else if(view==="clients")setShowAddClient(true);
+          else setShowAddNote(true);
+        }}>+ Add</button>
+      )}
+
+      {/* AI PANEL */}
+      {aiOpen&&(
+        <>
+          <div className="ai-overlay" onClick={()=>setAiOpen(false)}/>
+          <div className="ai-panel">
+            <div className="ai-handle"/>
+            <div className="ai-header">
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{background:"linear-gradient(135deg,#2a1f5a,#1a3a5a)",border:"1px solid #3a2a7a",borderRadius:12,padding:"2px 8px",fontSize:10,color:"#a090ff",fontWeight:700}}>✦ AI</span>
+                <span style={{fontFamily:"'Playfair Display',serif",fontSize:15,color:"#b8aaf8"}}>Assistant</span>
+              </div>
+              <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={()=>setAiOpen(false)}>✕</button>
+            </div>
+            <div className="ai-tabs">
+              {[["chat","💬 Chat"],["briefing","📋 Brief"],["email","✉️ Email"],["suggest","💡 Tasks"]].map(([k,l])=>(
+                <button key={k} className="ai-tab" onClick={()=>setAiTab(k)} style={{borderBottom:`2px solid ${aiTab===k?"#6858c8":"transparent"}`,color:aiTab===k?"#a898f0":"var(--text3)"}}>{l}</button>
+              ))}
+            </div>
+            <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              {aiTab==="chat"&&(
+                <>
+                  <div style={{flex:1,overflowY:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                    {chatHistory.map((m,i)=><div key={i} className={`ai-bubble ${m.role}`}>{m.content}</div>)}
+                    {aiLoading&&<div className="ai-bubble assistant" style={{display:"flex",gap:5}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
+                    <div ref={chatEndRef}/>
+                  </div>
+                  <div style={{padding:"0 12px 4px",display:"flex",gap:6,overflowX:"auto"}}>
+                    {["What's urgent today?","Any overdue?","Next renewal?"].map(p=>(
+                      <button key={p} onClick={()=>setChatInput(p)} style={{flexShrink:0,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:14,padding:"5px 10px",fontSize:11.5,color:"var(--text3)",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
+                    ))}
+                  </div>
+                  <div style={{padding:"10px 12px",borderTop:"1px solid var(--border)",display:"flex",gap:8,paddingBottom:"calc(10px + env(safe-area-inset-bottom))"}}>
+                    <input className="input" style={{fontSize:13.5,padding:"10px 12px"}} placeholder="Ask anything…" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();sendChat();}}}/>
+                    <button className="btn btn-gold" style={{padding:"10px 14px",flexShrink:0}} onClick={sendChat} disabled={aiLoading}>↑</button>
+                  </div>
+                </>
+              )}
+              {aiTab==="briefing"&&(
+                <div style={{flex:1,overflowY:"auto",padding:"14px",display:"flex",flexDirection:"column",gap:10}}>
+                  <p style={{fontSize:13,color:"var(--text3)",lineHeight:1.55}}>AI generates a personalised daily briefing based on your workflow and current data.</p>
+                  <button className="btn btn-gold btn-full" onClick={genBriefing} disabled={aiLoading}>{aiLoading?"Generating…":"📋 Generate Daily Briefing"}</button>
+                  {aiLoading&&!briefing&&<div style={{display:"flex",gap:5,justifyContent:"center",padding:16}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
+                  {briefing&&<div className="ai-bubble assistant">{briefing}</div>}
+                </div>
+              )}
+              {aiTab==="email"&&(
+                <div style={{flex:1,overflowY:"auto",padding:"14px",display:"flex",flexDirection:"column",gap:11}}>
+                  <p style={{fontSize:13,color:"var(--text3)",lineHeight:1.5}}>AI drafts emails matching your communication style.</p>
+                  <div><div className="lbl">{labels.clients||"Client"}</div>
+                    <select className="select" value={emailCtx.clientId} onChange={e=>setEmailCtx(x=>({...x,clientId:e.target.value}))}>
+                      <option value="">— Select —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div><div className="lbl">Purpose</div><textarea className="input" placeholder="What's this email about?" value={emailCtx.purpose} onChange={e=>setEmailCtx(x=>({...x,purpose:e.target.value}))}/></div>
+                  <button className="btn btn-gold btn-full" onClick={genEmail} disabled={aiLoading||!emailCtx.clientId||!emailCtx.purpose}>{aiLoading?"Drafting…":"✉️ Draft Email"}</button>
+                  {emailDraft&&(
+                    <div>
+                      <div className="ai-bubble assistant" style={{marginBottom:8}}>{emailDraft}</div>
+                      <button className="btn btn-ghost btn-full btn-sm" onClick={()=>{navigator.clipboard.writeText(emailDraft);alert("Copied!");}}>📋 Copy</button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {aiTab==="suggest"&&(
+                <div style={{flex:1,overflowY:"auto",padding:"14px",display:"flex",flexDirection:"column",gap:8}}>
+                  <button className="btn btn-gold btn-full" onClick={genSuggestions} disabled={aiLoading}>{aiLoading?"Thinking…":"💡 Get AI Suggestions"}</button>
+                  {aiLoading&&<div style={{display:"flex",gap:5,justifyContent:"center",padding:16}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
+                  {suggestions.map((s,i)=>(
+                    <div key={i} className="card-sm">
+                      <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>{s.title}</div>
+                      <div style={{fontSize:12,color:"var(--text3)",marginBottom:6}}>{s.reason}</div>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span className="pill" style={{background:"var(--bg3)",color:"var(--text2)"}}>{s.priority}</span>
+                        <span style={{fontSize:12,color:"var(--text3)"}}>{fmtDate(s.dueDate)}</span>
+                        <button className="btn btn-gold btn-sm" style={{marginLeft:"auto"}} onClick={()=>addSuggested(s)}>+ Add</button>
+                      </div>
+                    </div>
+                  ))}
+                  {!aiLoading&&suggestions.length===0&&<div style={{color:"var(--text3)",fontSize:13,textAlign:"center",padding:"16px 0"}}>Tap above for AI suggestions.</div>}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* MODALS */}
+      {showAddTask&&<TaskModal clients={clients} categories={categories} settings={settings} onClose={()=>setShowAddTask(false)} onSave={t=>{setTasks(ts=>[...ts,{...t,id:uid(),done:false,subtasks:t.subtasks||[],tags:t.tags||[]}]);setShowAddTask(false);}}/>}
+      {editTask&&<TaskModal clients={clients} categories={categories} settings={settings} task={editTask} isEdit onClose={()=>setEditTask(null)} onSave={t=>{setTasks(ts=>ts.map(x=>x.id===t.id?t:x));setEditTask(null);}}/>}
+      {showAddRenewal&&<RenewalModal clients={clients} cur={cur} onClose={()=>setShowAddRenewal(false)} onSave={r=>{setRenewals(rs=>[...rs,{...r,id:uid(),status:"upcoming"}]);setShowAddRenewal(false);}}/>}
+      {editRenewal&&<RenewalModal clients={clients} cur={cur} isEdit renewal={editRenewal} onClose={()=>setEditRenewal(null)} onSave={r=>saveEditRenewal(editRenewal.id,r)}/>}
+      {showAddClient&&<ClientModal settings={settings} onClose={()=>setShowAddClient(false)} onSave={c=>{setClients(cs=>[...cs,{...c,id:uid(),customFields:c.customFields||[]}]);setShowAddClient(false);}}/>}
+      {editClient&&<ClientModal settings={settings} isEdit client={editClient} onClose={()=>setEditClient(null)} onSave={c=>{setClients(cs=>cs.map(x=>x.id===c.id?c:x));setEditClient(null);}}/>}
+      {showAddNote&&<NoteModal onClose={()=>setShowAddNote(false)} onSave={n=>{setNotes(ns=>[...ns,{...n,id:uid(),createdAt:Date.now(),pinned:false}]);setShowAddNote(false);}}/>}
+      {editNote&&<NoteModal note={editNote} isEdit onClose={()=>setEditNote(null)} onSave={n=>{setNotes(ns=>ns.map(x=>x.id===n.id?n:x));setEditNote(null);}}/>}
+      {showImportModal&&<ImportModal onClose={()=>setShowImportModal(false)} onImport={handleImportCSV}/>}
+    </div>
+  );
+}
+
+// ─── SETTINGS VIEW ───────────────────────────────────────────────────────────
+function SettingsView({settings,setSettings,categories,setCategories,wfFields,setWfFields,clients,tasks,renewals,onExport,onImport,cur,labels}){
+  const s=(k,v)=>setSettings(x=>({...x,[k]:v}));
+  const ACCENT_COLORS=["#e8c858","#38c3e8","#57ff9c","#e838a8","#9888f0","#ff8857","#ff5757","#a8e838","#e8a838","#ffffff"];
+  const ALL_MODULES=["home","tasks","renewals","clients","projects","finances","workflow","notes","settings"];
+  const MODULE_ICONS={home:"🏠",tasks:"✅",renewals:"🔄",clients:"👥",projects:"📁",finances:"💰",workflow:"🧠",notes:"📝",settings:"⚙️"};
+  const ALL_STATS_KEYS=["today","overdue","renewals","pending","clients","revenue"];
+
+  return(
+    <div>
+      <div className="page-header"><h1 className="page-title">⚙️ {labels.settings||"Settings"}</h1></div>
+
+      {/* APP IDENTITY */}
+      <div className="settings-section">
+        <div className="settings-section-title">🪪 App Identity</div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div><div className="lbl">App Name</div><input className="input" value={settings.appName||""} onChange={e=>s("appName",e.target.value)} placeholder="WorkDesk"/></div>
+          <div><div className="lbl">Your Name</div><input className="input" value={settings.name||""} onChange={e=>s("name",e.target.value)} placeholder="e.g. Alex"/></div>
+          <div><div className="lbl">Company / Practice</div><input className="input" value={settings.company||""} onChange={e=>s("company",e.target.value)} placeholder="Optional"/></div>
+          <div><div className="lbl">Currency</div>
+            <select className="select" value={settings.currency||"$"} onChange={e=>s("currency",e.target.value)}>
+              {[["$","USD"],["RM","MYR"],["£","GBP"],["€","EUR"],["¥","JPY"],["₹","INR"],["A$","AUD"],["CHF","CHF"],["SGD","SGD"],["฿","THB"]].map(([v,l])=><option key={v} value={v}>{v} — {l}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* APPEARANCE */}
+      <div className="settings-section">
+        <div className="settings-section-title">🎨 Appearance</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div><div style={{fontSize:14,fontWeight:600}}>Dark Mode</div><div style={{fontSize:12,color:"var(--text3)"}}>Dark background</div></div>
+          <div className="toggle" style={{background:settings.darkMode!==false?"var(--green)":"var(--border)"}} onClick={()=>s("darkMode",settings.darkMode===false?true:false)}>
+            <div className="toggle-knob" style={{left:settings.darkMode!==false?22:3}}/>
+          </div>
+        </div>
+        <div className="lbl">Accent Color</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+          {ACCENT_COLORS.map(c=>(
+            <div key={c} className={`color-swatch${settings.accentColor===c?" active":""}`} style={{background:c,border:`2px solid ${settings.accentColor===c?"#fff":"transparent"}`}} onClick={()=>s("accentColor",c)}/>
+          ))}
+          <input type="color" value={settings.accentColor||"#e8c858"} onChange={e=>s("accentColor",e.target.value)} style={{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",padding:0}}/>
+        </div>
+      </div>
+
+      {/* RENAME SECTIONS */}
+      <div className="settings-section">
+        <div className="settings-section-title">🏷 Rename Sections</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {ALL_MODULES.map(key=>(
+            <div key={key} style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{width:24,textAlign:"center"}}>{MODULE_ICONS[key]}</span>
+              <input className="input" style={{flex:1,fontSize:13,padding:"8px 10px"}} value={(settings.labels||{})[key]||key} onChange={e=>setSettings(x=>({...x,labels:{...(x.labels||DEFAULT_SETTINGS.labels),[key]:e.target.value}}))} placeholder={key}/>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* NAVIGATION */}
+      <div className="settings-section">
+        <div className="settings-section-title">🗂 Navigation Modules</div>
+        {ALL_MODULES.map(key=>{
+          const locked=key==="home"||key==="settings";
+          const active=(settings.activeModules||DEFAULT_SETTINGS.activeModules).includes(key);
+          return(
+            <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{fontSize:13,display:"flex",alignItems:"center",gap:8}}>{MODULE_ICONS[key]} {(settings.labels||{})[key]||key}</span>
+              <div className="toggle" style={{background:active?"var(--accent)":"var(--border)",opacity:locked?.5:1,pointerEvents:locked?"none":"auto"}}
+                onClick={()=>{const curr=settings.activeModules||DEFAULT_MODULES;setSettings(x=>({...x,activeModules:curr.includes(key)?curr.filter(k=>k!==key):[...curr,key]}));}}>
+                <div className="toggle-knob" style={{left:active?22:3}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DASHBOARD WIDGETS */}
+      <div className="settings-section">
+        <div className="settings-section-title">📊 Dashboard Widgets</div>
+        {[["stats","📊","Stat Cards"],["ai","✦","AI Quick Actions"],["overdue","⚠️","Overdue Section"],["today","📅","Today's Tasks"],["upcoming","📅","Coming Up"],["renewals","🔄","Renewal Alerts"],["notes","📝","Pinned Notes"]].map(([k,icon,label])=>{
+          const active=(settings.dashWidgets||{})[k]!==false;
+          return(
+            <div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{fontSize:13}}>{icon} {label}</span>
+              <div className="toggle" style={{background:active?"var(--accent)":"var(--border)"}}
+                onClick={()=>setSettings(x=>({...x,dashWidgets:{...(x.dashWidgets||{}),[k]:!active}}))}>
+                <div className="toggle-knob" style={{left:active?22:3}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* STAT CARDS */}
+      <div className="settings-section">
+        <div className="settings-section-title">🔢 Stat Cards</div>
+        {ALL_STATS_KEYS.map(k=>{
+          const def={today:"Today's Tasks",overdue:"Overdue",renewals:"Renewals <30d",pending:"Pending Total",clients:"Active Clients",revenue:"Est. Revenue"};
+          const active=(settings.activeStats||[]).includes(k);
+          return(
+            <div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{fontSize:13}}>{def[k]}</span>
+              <div className="toggle" style={{background:active?"var(--accent)":"var(--border)"}}
+                onClick={()=>{const curr=settings.activeStats||[];setSettings(x=>({...x,activeStats:curr.includes(k)?curr.filter(i=>i!==k):[...curr,k]}));}}>
+                <div className="toggle-knob" style={{left:active?22:3}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* TASK CATEGORIES */}
+      <div className="settings-section">
+        <div className="settings-section-title">🗂 Task Categories</div>
+        {categories.map((cat,i)=>(
+          <div key={cat.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+            <input value={cat.icon} onChange={e=>setCategories(cs=>cs.map(c=>c.id===cat.id?{...c,icon:e.target.value}:c))} style={{width:44,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 8px",color:"var(--text)",fontSize:16,textAlign:"center",outline:"none"}}/>
+            <input value={cat.label} onChange={e=>setCategories(cs=>cs.map(c=>c.id===cat.id?{...c,label:e.target.value}:c))} style={{flex:1,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 10px",color:"var(--text)",fontSize:13,outline:"none"}}/>
+            <input type="color" value={cat.color} onChange={e=>setCategories(cs=>cs.map(c=>c.id===cat.id?{...c,color:e.target.value}:c))} style={{width:36,height:36,borderRadius:8,border:"none",cursor:"pointer",padding:0}}/>
+            <button className="btn btn-red btn-sm" style={{padding:"7px 10px"}} onClick={()=>setCategories(cs=>cs.filter(c=>c.id!==cat.id))}>✕</button>
+          </div>
+        ))}
+        <button className="btn btn-ghost btn-full btn-sm" style={{marginTop:4}} onClick={()=>setCategories(cs=>[...cs,{id:uid(),label:"New Category",icon:"🏷",color:"#888888",bg:"#1a1a1a"}])}>+ Add Category</button>
+      </div>
+
+      {/* CLIENT TYPES */}
+      <div className="settings-section">
+        <div className="settings-section-title">👥 {(settings.labels||{}).clients||"Client"} Types</div>
+        {(settings.clientTypes||[]).map((ct)=>(
+          <div key={ct.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+            <input value={ct.icon} onChange={e=>setSettings(x=>({...x,clientTypes:x.clientTypes.map(c=>c.id===ct.id?{...c,icon:e.target.value}:c)}))} style={{width:44,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 8px",color:"var(--text)",fontSize:16,textAlign:"center",outline:"none"}}/>
+            <input value={ct.label} onChange={e=>setSettings(x=>({...x,clientTypes:x.clientTypes.map(c=>c.id===ct.id?{...c,label:e.target.value}:c)}))} style={{flex:1,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 10px",color:"var(--text)",fontSize:13,outline:"none"}}/>
+            <input type="color" value={ct.color} onChange={e=>setSettings(x=>({...x,clientTypes:x.clientTypes.map(c=>c.id===ct.id?{...c,color:e.target.value}:c)}))} style={{width:36,height:36,borderRadius:8,border:"none",cursor:"pointer",padding:0}}/>
+            <button className="btn btn-red btn-sm" style={{padding:"7px 10px"}} onClick={()=>setSettings(x=>({...x,clientTypes:x.clientTypes.filter(c=>c.id!==ct.id)}))}>✕</button>
+          </div>
+        ))}
+        <button className="btn btn-ghost btn-full btn-sm" style={{marginTop:4}} onClick={()=>setSettings(x=>({...x,clientTypes:[...(x.clientTypes||[]),{id:uid(),label:"New Type",icon:"👤",color:"#9888f0",bg:"#1a1228"}]}))}>+ Add Type</button>
+      </div>
+
+      {/* WORKFLOW FIELDS */}
+      <div className="settings-section">
+        <div className="settings-section-title">🧠 Workflow Fields</div>
+        {wfFields.map((f,i)=>(
+          <div key={f.key} style={{display:"flex",gap:6,alignItems:"center",marginBottom:8}}>
+            <input value={f.icon} onChange={e=>setWfFields(fs=>fs.map(x=>x.key===f.key?{...x,icon:e.target.value}:x))} style={{width:44,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 8px",color:"var(--text)",fontSize:16,textAlign:"center",outline:"none"}}/>
+            <input value={f.label} onChange={e=>setWfFields(fs=>fs.map(x=>x.key===f.key?{...x,label:e.target.value}:x))} style={{flex:1,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 10px",color:"var(--text)",fontSize:13,outline:"none"}}/>
+            <button className="btn btn-red btn-sm" style={{padding:"7px 10px"}} onClick={()=>setWfFields(fs=>fs.filter(x=>x.key!==f.key))}>✕</button>
+          </div>
+        ))}
+        <button className="btn btn-ghost btn-full btn-sm" style={{marginTop:4}} onClick={()=>setWfFields(fs=>[...fs,{key:"wf"+uid(),label:"New Field",icon:"📌"}])}>+ Add Field</button>
+      </div>
+
+      {/* DATA */}
+      <div className="settings-section">
+        <div className="settings-section-title">💾 Data</div>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:12}}>All data lives on this device. Export regularly to back up.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <button className="btn btn-ghost btn-full" onClick={()=>onExport("tasks")}>⬇ Export Tasks (CSV)</button>
+          <button className="btn btn-ghost btn-full" onClick={()=>onExport("clients")}>⬇ Export {(settings.labels||{}).clients||"Clients"} (CSV)</button>
+          <button className="btn btn-ghost btn-full" onClick={()=>onExport("all")}>⬇ Full Backup (JSON)</button>
+          <button className="btn btn-ghost btn-full" onClick={onImport}>⬆ Import from CSV</button>
+        </div>
+        <button className="btn btn-ghost btn-full" style={{color:"#ff6868",borderColor:"#2e1a1a",marginTop:12}} onClick={()=>{if(window.confirm("Clear ALL data? This cannot be undone.")){localStorage.clear();window.location.reload();}}}>🗑 Clear All Data</button>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">ℹ️ About</div>
+        <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>WorkDesk · Universal work command centre · AI powered by Claude (Anthropic) · All data stored locally on your device.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SUB-COMPONENTS ───────────────────────────────────────────────────────────
+function TaskRow({task,clients,categories,catMap,onToggle,onDelete,onEdit,timerDisplay,onStartTimer,onStopTimer,onToggleSubtask}){
+  const cat=catMap[task.category]||categories[0]||{label:"?",color:"#888",bg:"#1a1a1a",icon:"📌"};
+  const pri=PRIORITIES[task.priority]||PRIORITIES.medium;
+  const d=daysUntil(task.dueDate);
+  const dl=dayLabel(d);
+  const cl=clients.find(c=>c.id===task.clientId);
+  const [expanded,setExpanded]=useState(false);
+  const [swipeX,setSwipeX]=useState(0);
+  const [swiping,setSwiping]=useState(false);
+  const startXRef=useRef(0);
+  const handleTouchStart=e=>{startXRef.current=e.touches[0].clientX;setSwiping(true);};
+  const handleTouchMove=e=>{setSwipeX(Math.max(-90,Math.min(90,e.touches[0].clientX-startXRef.current)));};
+  const handleTouchEnd=()=>{if(swipeX<-60)onDelete(task.id);else if(swipeX>60)onToggle(task.id);setSwipeX(0);setSwiping(false);};
+  const showLeft=swipeX>20,showRight=swipeX<-20;
+  const hasSubtasks=(task.subtasks||[]).length>0;
+  const completedSubs=(task.subtasks||[]).filter(s=>s.done).length;
+
+  return(
+    <div style={{position:"relative",overflow:"hidden",borderRadius:12,marginBottom:8}}>
+      <div style={{position:"absolute",inset:0,borderRadius:12,background:showLeft?"#0e2e0e":showRight?"#2e0e0e":"transparent",display:"flex",alignItems:"center",justifyContent:showLeft?"flex-start":showRight?"flex-end":"center",padding:"0 18px",pointerEvents:"none"}}>
+        {showLeft&&<span style={{fontSize:18,color:"var(--green)",fontWeight:700}}>✓</span>}
+        {showRight&&<span style={{fontSize:18,color:"var(--red)",fontWeight:700}}>✕</span>}
+      </div>
+      <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{transform:`translateX(${swipeX}px)`,transition:swiping?"none":"transform .2s ease"}} className="card-sm">
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,opacity:task.done?.4:1}}>
+          <div className={`cb${task.done?" on":""}`} style={{marginTop:2}} onClick={()=>onToggle(task.id)}>
+            {task.done&&<span style={{fontSize:10,color:"#0d0d10",fontWeight:900}}>✓</span>}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,fontSize:14,color:task.done?"var(--text3)":"var(--text)",textDecoration:task.done?"line-through":"none",marginBottom:4,lineHeight:1.3,cursor:hasSubtasks?"pointer":"default"}} onClick={()=>hasSubtasks&&setExpanded(e=>!e)}>
+              {task.title}
+              {hasSubtasks&&<span style={{fontSize:11,color:"var(--text3)",marginLeft:6}}>({completedSubs}/{task.subtasks.length})</span>}
+            </div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+              <span className="pill" style={{background:cat.bg,color:cat.color}}>{cat.icon} {cat.label}</span>
+              <span className="pill" style={{background:"#1a1014",color:pri.color}}>● {pri.label}</span>
+              {(task.tags||[]).map(g=><span key={g} className="tag">#{g}</span>)}
+            </div>
+            <div style={{fontSize:12,color:"var(--text3)",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <span>📅 {fmtDate(task.dueDate)}{task.time?` · ${task.time}`:""}</span>
+              {cl&&<span>👤 {cl.name}</span>}
+              {!task.done&&<span style={{color:dl.color,fontWeight:600}}>{dl.text}</span>}
+              {timerDisplay&&<span style={{color:timerDisplay.running?"var(--red)":"var(--green)",fontWeight:600}}>⏱ {timerDisplay.display}</span>}
+            </div>
+            {task.recurrence&&<div style={{fontSize:11,color:"var(--ai-light)",marginTop:2}}>🔁 {task.recurrence}</div>}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+            <div style={{display:"flex",gap:4}}>
+              <button className="btn btn-ghost btn-sm" style={{padding:"5px 8px",fontSize:12}} onClick={()=>onEdit(task)}>✏️</button>
+              <button className="btn btn-red btn-sm" style={{padding:"5px 8px",fontSize:12}} onClick={()=>onDelete(task.id)}>✕</button>
+            </div>
+            {timerDisplay?(
+              timerDisplay.running
+                ?<button className="timer-btn timer-running" onClick={()=>onStopTimer(task.id)}>⏹ Stop</button>
+                :<button className="timer-btn" onClick={()=>onStartTimer(task.id)}>▶ Timer</button>
+            ):(
+              <button className="timer-btn" onClick={()=>onStartTimer(task.id)}>▶ Timer</button>
+            )}
+          </div>
+        </div>
+        {expanded&&hasSubtasks&&(
+          <div style={{paddingLeft:32,marginTop:6,borderTop:"1px solid var(--border)",paddingTop:6}}>
+            {task.subtasks.map(sub=>(
+              <div key={sub.id} className="subtask-row">
+                <div className={`subtask-check${sub.done?" done":""}`} onClick={()=>onToggleSubtask&&onToggleSubtask(task.id,sub.id)}>
+                  {sub.done&&"✓"}
+                </div>
+                <span style={{fontSize:13,textDecoration:sub.done?"line-through":"none",color:sub.done?"var(--text3)":"var(--text)"}}>{sub.title}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TaskModal({clients,categories,settings,task,onClose,onSave,isEdit}){
+  const [f,setF]=useState(task||{title:"",category:categories[0]?.id||"",priority:"medium",dueDate:"",time:"",clientId:"",notes:"",tags:[],subtasks:[],recurrence:""});
+  const [tagInput,setTagInput]=useState("");
+  const [newSub,setNewSub]=useState("");
+  const sv=(k,v)=>setF(x=>({...x,[k]:v}));
+  const addTag=()=>{const t=tagInput.trim().replace(/^#/,"");if(t&&!(f.tags||[]).includes(t)){sv("tags",[...(f.tags||[]),t]);setTagInput("");}};
+  const removeTag=t=>sv("tags",(f.tags||[]).filter(x=>x!==t));
+  const addSub=()=>{const t=newSub.trim();if(t){sv("subtasks",[...(f.subtasks||[]),{id:uid(),title:t,done:false}]);setNewSub("");}};
+  const labels=settings.labels||DEFAULT_SETTINGS.labels;
+
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal modal-border-mobile">
+        <div className="modal-header">
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:20}}>{isEdit?"Edit":"New"} {labels.tasks?.replace(/s$/,"")||"Task"}</h2>
+          <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div><div className="lbl">Title *</div><input className="input" value={f.title} onChange={e=>sv("title",e.target.value)} placeholder="Task title…"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><div className="lbl">Category</div><select className="select" value={f.category} onChange={e=>sv("category",e.target.value)}>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}</select></div>
+            <div><div className="lbl">Priority</div><select className="select" value={f.priority} onChange={e=>sv("priority",e.target.value)}>{Object.entries(PRIORITIES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><div className="lbl">Due Date *</div><input className="input" type="date" value={f.dueDate} onChange={e=>sv("dueDate",e.target.value)}/></div>
+            <div><div className="lbl">Time</div><input className="input" type="time" value={f.time||""} onChange={e=>sv("time",e.target.value)}/></div>
+          </div>
+          <div><div className="lbl">{labels.clients||"Client"}</div><select className="select" value={f.clientId||""} onChange={e=>sv("clientId",e.target.value)}><option value="">— None —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><div className="lbl">Recurrence</div>
+            <select className="select" value={f.recurrence||""} onChange={e=>sv("recurrence",e.target.value)}>
+              <option value="">None</option><option value="Daily">Daily</option><option value="Weekly">Weekly</option><option value="Fortnightly">Fortnightly</option><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option>
+            </select>
+          </div>
+          {/* Tags */}
+          <div>
+            <div className="lbl">Tags</div>
+            <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+              {(f.tags||[]).map(t=><span key={t} className="tag" style={{cursor:"pointer"}} onClick={()=>removeTag(t)}>#{t} ✕</span>)}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input className="input" style={{flex:1,fontSize:13}} placeholder="#tag…" value={tagInput} onChange={e=>setTagInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addTag();}}}/>
+              <button className="btn btn-ghost btn-sm" onClick={addTag}>Add</button>
+            </div>
+          </div>
+          {/* Subtasks */}
+          <div>
+            <div className="lbl">Subtasks / Checklist</div>
+            {(f.subtasks||[]).map((sub,i)=>(
+              <div key={sub.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <div className={`subtask-check${sub.done?" done":""}`} onClick={()=>sv("subtasks",f.subtasks.map(s=>s.id===sub.id?{...s,done:!s.done}:s))}>{sub.done&&"✓"}</div>
+                <span style={{flex:1,fontSize:13,textDecoration:sub.done?"line-through":"none"}}>{sub.title}</span>
+                <button className="btn btn-red btn-sm" style={{padding:"3px 7px",fontSize:11}} onClick={()=>sv("subtasks",f.subtasks.filter(s=>s.id!==sub.id))}>✕</button>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6}}>
+              <input className="input" style={{flex:1,fontSize:13}} placeholder="Add subtask…" value={newSub} onChange={e=>setNewSub(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSub();}}}/>
+              <button className="btn btn-ghost btn-sm" onClick={addSub}>+</button>
+            </div>
+          </div>
+          <div><div className="lbl">Notes</div><textarea className="input" value={f.notes||""} onChange={e=>sv("notes",e.target.value)} placeholder="Details…"/></div>
+        </div>
+        <div style={{display:"flex",gap:9,marginTop:18}}>
+          <button className="btn btn-ghost" style={{flex:1}} onClick={onClose}>Cancel</button>
+          <button className="btn btn-gold" style={{flex:2}} onClick={()=>f.title&&f.dueDate&&onSave(f)}>{isEdit?"Save Changes":"Add"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RenewalModal({clients,cur,onClose,onSave,isEdit,renewal}){
+  const [f,setF]=useState(isEdit?{clientId:renewal.clientId,service:renewal.service,cost:renewal.cost,billingAmount:renewal.billingAmount,renewalDate:renewal.renewalDate,notes:renewal.notes||""}:{clientId:"",service:"",cost:"",billingAmount:"",renewalDate:"",notes:""});
+  const sv=(k,v)=>setF(x=>({...x,[k]:v}));
+  const profit=(parseFloat(f.billingAmount)||0)-(parseFloat(f.cost)||0);
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal modal-border-mobile">
+        <div className="modal-header">
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:20}}>{isEdit?"Edit Renewal":"New Renewal"}</h2>
+          <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div><div className="lbl">Client</div><select className="select" value={f.clientId} onChange={e=>sv("clientId",e.target.value)}><option value="">— None —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><div className="lbl">Service / Contract *</div><input className="input" value={f.service} onChange={e=>sv("service",e.target.value)} placeholder="e.g. Annual retainer"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><div className="lbl">Your Cost ({cur})</div><input className="input" type="number" value={f.cost} onChange={e=>sv("cost",e.target.value)}/></div>
+            <div><div className="lbl">Bill Client ({cur})</div><input className="input" type="number" value={f.billingAmount} onChange={e=>sv("billingAmount",e.target.value)}/></div>
+          </div>
+          {f.billingAmount&&<div style={{background:"var(--bg3)",borderRadius:8,padding:"10px 12px",fontSize:14,color:"var(--green)"}}>Profit: <strong>{cur}{profit.toFixed(2)}</strong></div>}
+          <div><div className="lbl">Renewal Date *</div><input className="input" type="date" value={f.renewalDate} onChange={e=>sv("renewalDate",e.target.value)}/></div>
+          <div><div className="lbl">Notes</div><input className="input" value={f.notes} onChange={e=>sv("notes",e.target.value)} placeholder="Optional notes"/></div>
+        </div>
+        <div style={{display:"flex",gap:9,marginTop:18}}>
+          <button className="btn btn-ghost" style={{flex:1}} onClick={onClose}>Cancel</button>
+          <button className="btn btn-gold" style={{flex:2}} onClick={()=>f.service&&f.renewalDate&&onSave({...f,cost:parseFloat(f.cost)||0,billingAmount:parseFloat(f.billingAmount)||0})}>{isEdit?"Save Changes":"Add Renewal"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClientModal({settings,onClose,onSave,isEdit,client}){
+  const [f,setF]=useState(client||{name:"",email:"",phone:"",type:(settings.clientTypes||[])[0]?.id||"ct1",notes:"",customFields:[]});
+  const sv=(k,v)=>setF(x=>({...x,[k]:v}));
+  const addCF=()=>setF(x=>({...x,customFields:[...(x.customFields||[]),{id:uid(),label:"Field",value:""}]}));
+  const labels=settings.labels||DEFAULT_SETTINGS.labels;
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal modal-border-mobile">
+        <div className="modal-header">
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:20}}>{isEdit?"Edit":"New"} {labels.clients?.replace(/s$/,"")||"Client"}</h2>
+          <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div><div className="lbl">Name *</div><input className="input" value={f.name} onChange={e=>sv("name",e.target.value)} placeholder="Name"/></div>
+          <div><div className="lbl">Email</div><input className="input" type="email" value={f.email||""} onChange={e=>sv("email",e.target.value)} placeholder="email@example.com"/></div>
+          <div><div className="lbl">Phone</div><input className="input" type="tel" value={f.phone||""} onChange={e=>sv("phone",e.target.value)} placeholder="+1 555 0100"/></div>
+          <div><div className="lbl">Type</div><select className="select" value={f.type||""} onChange={e=>sv("type",e.target.value)}>{(settings.clientTypes||[]).map(ct=><option key={ct.id} value={ct.id}>{ct.icon} {ct.label}</option>)}</select></div>
+          {/* Custom fields */}
+          {(f.customFields||[]).map(cf=>(
+            <div key={cf.id} style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input value={cf.label} onChange={e=>sv("customFields",f.customFields.map(x=>x.id===cf.id?{...x,label:e.target.value}:x))} style={{width:100,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px",color:"var(--text)",fontSize:12,outline:"none"}} placeholder="Field name"/>
+              <input value={cf.value} onChange={e=>sv("customFields",f.customFields.map(x=>x.id===cf.id?{...x,value:e.target.value}:x))} style={{flex:1,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px",color:"var(--text)",fontSize:13,outline:"none"}} placeholder="Value"/>
+              <button className="btn btn-red btn-sm" style={{padding:"7px 10px"}} onClick={()=>sv("customFields",f.customFields.filter(x=>x.id!==cf.id))}>✕</button>
+            </div>
+          ))}
+          <button className="btn btn-ghost btn-full btn-sm" onClick={addCF}>+ Custom Field</button>
+          <div><div className="lbl">Notes</div><textarea className="input" value={f.notes||""} onChange={e=>sv("notes",e.target.value)} placeholder="Any notes…"/></div>
+        </div>
+        <div style={{display:"flex",gap:9,marginTop:18}}>
+          <button className="btn btn-ghost" style={{flex:1}} onClick={onClose}>Cancel</button>
+          <button className="btn btn-gold" style={{flex:2}} onClick={()=>f.name&&onSave(f)}>{isEdit?"Save Changes":"Add"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NoteModal({note,onClose,onSave,isEdit}){
+  const [f,setF]=useState(note||{title:"",body:""});
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal modal-border-mobile">
+        <div className="modal-header">
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:20}}>{isEdit?"Edit Note":"New Note"}</h2>
+          <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div><div className="lbl">Title *</div><input className="input" value={f.title} onChange={e=>setF(x=>({...x,title:e.target.value}))} placeholder="Note title…"/></div>
+          <div><div className="lbl">Content</div><textarea className="input" style={{minHeight:120}} value={f.body} onChange={e=>setF(x=>({...x,body:e.target.value}))} placeholder="Write anything…"/></div>
+        </div>
+        <div style={{display:"flex",gap:9,marginTop:18}}>
+          <button className="btn btn-ghost" style={{flex:1}} onClick={onClose}>Cancel</button>
+          <button className="btn btn-gold" style={{flex:2}} onClick={()=>f.title&&onSave(f)}>{isEdit?"Save Changes":"Add Note"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportModal({onClose,onImport}){
+  const [type,setType]=useState("tasks");
+  const fileRef=useRef();
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal modal-border-mobile">
+        <div className="modal-header">
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:20}}>⬆ Import CSV</h2>
+          <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          {[["tasks","Tasks"],["clients","Contacts"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setType(k)} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid",borderColor:type===k?"var(--accent)":"var(--border)",background:"none",color:type===k?"var(--accent)":"var(--text3)",cursor:"pointer",fontFamily:"inherit",fontWeight:600,fontSize:13}}>{l}</button>
+          ))}
+        </div>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:12,lineHeight:1.6}}>
+          {type==="tasks"?"CSV columns: Title, Category, Priority, Due Date, Notes, Tags":"CSV columns: Name, Email, Phone, Notes"}
+        </div>
+        <div className="import-zone" onClick={()=>fileRef.current?.click()}>
+          <div style={{fontSize:32,marginBottom:8}}>📂</div>
+          <div>Click to select a .csv file</div>
+          <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>onImport(e,type)}/>
+        </div>
+        <div style={{marginTop:16}}><button className="btn btn-ghost btn-full" onClick={onClose}>Cancel</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ── Pull-to-refresh block ──────────────────────────────────────────────────────
+(function(){
+  let startY=0,startScrollTop=0,scrollEl=null;
+  document.addEventListener('touchstart',function(e){startY=e.touches[0].clientY;scrollEl=null;startScrollTop=0;let el=e.target;while(el&&el!==document.documentElement){const oy=window.getComputedStyle(el).overflowY;if((oy==='auto'||oy==='scroll')&&el.scrollHeight>el.clientHeight){scrollEl=el;startScrollTop=el.scrollTop;break;}el=el.parentElement;}},{passive:true});
+  document.addEventListener('touchmove',function(e){if(!scrollEl){e.preventDefault();return;}if(startScrollTop<=0&&scrollEl.scrollTop<=0&&e.touches[0].clientY-startY>5)e.preventDefault();},{passive:false});
+})();
+
+if("serviceWorker"in navigator){window.addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{});});}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
