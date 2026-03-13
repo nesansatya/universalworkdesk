@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS={
     projects:"Projects",finances:"Finances",workflow:"Workflow",notes:"Notes",settings:"Settings"
   },
   // active nav modules
-  activeModules:["home","tasks","renewals","clients","workflow","settings"],
+  activeModules:["home","tasks","renewals","clients","settings"],
   // dashboard widget visibility
   dashWidgets:{stats:true,ai:true,overdue:true,today:true,upcoming:true,renewals:true,clients:false,notes:false},
   // widget order (keys)
@@ -349,23 +349,23 @@ textarea.input{resize:none;min-height:76px;line-height:1.55;}
 // ─── ONBOARDING WIZARD ───────────────────────────────────────────────────────
 const INDUSTRY_PRESETS=[
   {id:"freelancer",icon:"💻",label:"Freelancer / Consultant",sub:"Design, dev, writing, marketing",
-    modules:["home","tasks","renewals","clients","finances","workflow","settings"],
+    modules:["home","tasks","renewals","clients","finances","settings"],
     labels:{tasks:"Jobs",clients:"Clients",renewals:"Contracts"},
     cats:[{id:"cat1",label:"Design",icon:"🎨",color:"#e838a8",bg:"#2a0620"},{id:"cat2",label:"Development",icon:"💻",color:"#38c3e8",bg:"#061a2a"},{id:"cat3",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},{id:"cat4",label:"Marketing",icon:"📣",color:"#e8a838",bg:"#2a1f06"}]},
   {id:"professional",icon:"💼",label:"Professional / Corporate",sub:"Accounting, law, consulting, finance",
-    modules:["home","tasks","renewals","clients","workflow","notes","settings"],
+    modules:["home","tasks","renewals","clients","notes","settings"],
     labels:{tasks:"Tasks",clients:"Clients",renewals:"Retainers"},
     cats:[{id:"cat1",label:"Client Work",icon:"📋",color:"#e8a838",bg:"#2a1f06"},{id:"cat2",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},{id:"cat3",label:"Compliance",icon:"⚖️",color:"#38c3e8",bg:"#061a2a"},{id:"cat4",label:"Business Dev",icon:"🤝",color:"#9888f0",bg:"#1a1228"}]},
   {id:"healthcare",icon:"🏥",label:"Healthcare / Wellness",sub:"Clinics, therapy, coaching, fitness",
-    modules:["home","tasks","clients","notes","workflow","settings"],
+    modules:["home","tasks","clients","notes","settings"],
     labels:{tasks:"Appointments",clients:"Patients",renewals:"Memberships"},
     cats:[{id:"cat1",label:"Consultation",icon:"🩺",color:"#38c3e8",bg:"#061a2a"},{id:"cat2",label:"Follow-up",icon:"📞",color:"#e8a838",bg:"#2a1f06"},{id:"cat3",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"},{id:"cat4",label:"Billing",icon:"💰",color:"#57ff9c",bg:"#082a14"}]},
   {id:"creator",icon:"🎬",label:"Content Creator / Artist",sub:"Video, photography, music, art",
-    modules:["home","tasks","clients","finances","notes","workflow","settings"],
+    modules:["home","tasks","clients","finances","notes","settings"],
     labels:{tasks:"Projects",clients:"Brands",renewals:"Subscriptions"},
     cats:[{id:"cat1",label:"Shooting",icon:"📸",color:"#e838a8",bg:"#2a0620"},{id:"cat2",label:"Editing",icon:"✂️",color:"#9888f0",bg:"#1a1228"},{id:"cat3",label:"Deliveries",icon:"📦",color:"#38c3e8",bg:"#061a2a"},{id:"cat4",label:"Admin",icon:"📁",color:"#a8e838",bg:"#1a2a06"}]},
   {id:"operations",icon:"⚙️",label:"Operations / Project Manager",sub:"Teams, processes, delivery, logistics",
-    modules:["home","tasks","projects","clients","workflow","notes","settings"],
+    modules:["home","tasks","projects","clients","notes","settings"],
     labels:{tasks:"Tasks",clients:"Stakeholders",renewals:"SLAs"},
     cats:[{id:"cat1",label:"Planning",icon:"📅",color:"#38c3e8",bg:"#061a2a"},{id:"cat2",label:"Execution",icon:"⚙️",color:"#e8a838",bg:"#2a1f06"},{id:"cat3",label:"Review",icon:"✅",color:"#57ff9c",bg:"#082a14"},{id:"cat4",label:"Escalation",icon:"🚨",color:"#ff5757",bg:"#200808"}]},
   {id:"custom",icon:"✨",label:"Something Else",sub:"I'll customise everything myself",
@@ -768,10 +768,10 @@ function App(){
                 <span style={{fontSize:12,color:"var(--text3)"}}>Personalised to your workflow</span>
               </div>
               <div className="qa-grid">
-                <button className="qa-btn" onClick={()=>openAI("briefing",genBriefing)}><span className="qa-icon">📋</span><span className="qa-label">Daily Brief</span></button>
-                <button className="qa-btn" onClick={()=>openAI("suggest",genSuggestions)}><span className="qa-icon">💡</span><span className="qa-label">Suggest Tasks</span></button>
-                <button className="qa-btn" onClick={()=>openAI("email",null)}><span className="qa-icon">✉️</span><span className="qa-label">Draft Email</span></button>
-                <button className="qa-btn" onClick={()=>openAI("chat",null)}><span className="qa-icon">💬</span><span className="qa-label">Ask AI</span></button>
+                <button className="qa-btn" onClick={()=>{setChatInput("Give me a daily briefing — what's urgent, overdue, and coming up?");setAiOpen(true);}}><span className="qa-icon">📋</span><span className="qa-label">Daily Brief</span></button>
+                <button className="qa-btn" onClick={()=>{setChatInput("Suggest 3 tasks I should do today based on my workload.");setAiOpen(true);}}><span className="qa-icon">💡</span><span className="qa-label">Suggest Tasks</span></button>
+                <button className="qa-btn" onClick={()=>{setChatInput("Draft a follow-up email to my most recent client.");setAiOpen(true);}}><span className="qa-icon">✉️</span><span className="qa-label">Draft Email</span></button>
+                <button className="qa-btn" onClick={()=>setAiOpen(true)}><span className="qa-icon">💬</span><span className="qa-label">Ask AI</span></button>
               </div>
             </div>
           )}
@@ -1275,74 +1275,21 @@ function App(){
               </div>
               <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={()=>setAiOpen(false)}>✕</button>
             </div>
-            <div className="ai-tabs">
-              {[["chat","💬 Chat"],["briefing","📋 Brief"],["email","✉️ Email"],["suggest","💡 Tasks"]].map(([k,l])=>(
-                <button key={k} className="ai-tab" onClick={()=>setAiTab(k)} style={{borderBottom:`2px solid ${aiTab===k?"#6858c8":"transparent"}`,color:aiTab===k?"#a898f0":"var(--text3)"}}>{l}</button>
-              ))}
-            </div>
             <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-              {aiTab==="chat"&&(
-                <>
-                  <div style={{flex:1,overflowY:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
-                    {chatHistory.map((m,i)=><div key={i} className={`ai-bubble ${m.role}`}>{m.content}</div>)}
-                    {aiLoading&&<div className="ai-bubble assistant" style={{display:"flex",gap:5}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
-                    <div ref={chatEndRef}/>
-                  </div>
-                  <div style={{padding:"0 12px 4px",display:"flex",gap:6,overflowX:"auto"}}>
-                    {["What's urgent today?","Any overdue?","Next renewal?"].map(p=>(
-                      <button key={p} onClick={()=>setChatInput(p)} style={{flexShrink:0,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:14,padding:"5px 10px",fontSize:11.5,color:"var(--text3)",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
-                    ))}
-                  </div>
-                  <div style={{padding:"10px 12px",borderTop:"1px solid var(--border)",display:"flex",gap:8,paddingBottom:"calc(10px + env(safe-area-inset-bottom))"}}>
-                    <input className="input" style={{fontSize:13.5,padding:"10px 12px"}} placeholder="Ask anything…" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();sendChat();}}}/>
-                    <button className="btn btn-gold" style={{padding:"10px 14px",flexShrink:0}} onClick={sendChat} disabled={aiLoading}>↑</button>
-                  </div>
-                </>
-              )}
-              {aiTab==="briefing"&&(
-                <div style={{flex:1,overflowY:"auto",padding:"14px",display:"flex",flexDirection:"column",gap:10}}>
-                  <p style={{fontSize:13,color:"var(--text3)",lineHeight:1.55}}>AI generates a personalised daily briefing based on your workflow and current data.</p>
-                  <button className="btn btn-gold btn-full" onClick={genBriefing} disabled={aiLoading}>{aiLoading?"Generating…":"📋 Generate Daily Briefing"}</button>
-                  {aiLoading&&!briefing&&<div style={{display:"flex",gap:5,justifyContent:"center",padding:16}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
-                  {briefing&&<div className="ai-bubble assistant">{briefing}</div>}
-                </div>
-              )}
-              {aiTab==="email"&&(
-                <div style={{flex:1,overflowY:"auto",padding:"14px",display:"flex",flexDirection:"column",gap:11}}>
-                  <p style={{fontSize:13,color:"var(--text3)",lineHeight:1.5}}>AI drafts emails matching your communication style.</p>
-                  <div><div className="lbl">{labels.clients||"Client"}</div>
-                    <select className="select" value={emailCtx.clientId} onChange={e=>setEmailCtx(x=>({...x,clientId:e.target.value}))}>
-                      <option value="">— Select —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div><div className="lbl">Purpose</div><textarea className="input" placeholder="What's this email about?" value={emailCtx.purpose} onChange={e=>setEmailCtx(x=>({...x,purpose:e.target.value}))}/></div>
-                  <button className="btn btn-gold btn-full" onClick={genEmail} disabled={aiLoading||!emailCtx.clientId||!emailCtx.purpose}>{aiLoading?"Drafting…":"✉️ Draft Email"}</button>
-                  {emailDraft&&(
-                    <div>
-                      <div className="ai-bubble assistant" style={{marginBottom:8}}>{emailDraft}</div>
-                      <button className="btn btn-ghost btn-full btn-sm" onClick={()=>{navigator.clipboard.writeText(emailDraft);alert("Copied!");}}>📋 Copy</button>
-                    </div>
-                  )}
-                </div>
-              )}
-              {aiTab==="suggest"&&(
-                <div style={{flex:1,overflowY:"auto",padding:"14px",display:"flex",flexDirection:"column",gap:8}}>
-                  <button className="btn btn-gold btn-full" onClick={genSuggestions} disabled={aiLoading}>{aiLoading?"Thinking…":"💡 Get AI Suggestions"}</button>
-                  {aiLoading&&<div style={{display:"flex",gap:5,justifyContent:"center",padding:16}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
-                  {suggestions.map((s,i)=>(
-                    <div key={i} className="card-sm">
-                      <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>{s.title}</div>
-                      <div style={{fontSize:12,color:"var(--text3)",marginBottom:6}}>{s.reason}</div>
-                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <span className="pill" style={{background:"var(--bg3)",color:"var(--text2)"}}>{s.priority}</span>
-                        <span style={{fontSize:12,color:"var(--text3)"}}>{fmtDate(s.dueDate)}</span>
-                        <button className="btn btn-gold btn-sm" style={{marginLeft:"auto"}} onClick={()=>addSuggested(s)}>+ Add</button>
-                      </div>
-                    </div>
-                  ))}
-                  {!aiLoading&&suggestions.length===0&&<div style={{color:"var(--text3)",fontSize:13,textAlign:"center",padding:"16px 0"}}>Tap above for AI suggestions.</div>}
-                </div>
-              )}
+              <div style={{flex:1,overflowY:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                {chatHistory.map((m,i)=><div key={i} className={`ai-bubble ${m.role}`}>{m.content}</div>)}
+                {aiLoading&&<div className="ai-bubble assistant" style={{display:"flex",gap:5}}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>}
+                <div ref={chatEndRef}/>
+              </div>
+              <div style={{padding:"0 12px 6px",display:"flex",gap:6,overflowX:"auto"}}>
+                {["What's urgent today?","Draft email to client","Suggest tasks for today","Any overdue items?"].map(p=>(
+                  <button key={p} onClick={()=>setChatInput(p)} style={{flexShrink:0,background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:14,padding:"5px 10px",fontSize:11.5,color:"var(--text3)",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
+                ))}
+              </div>
+              <div style={{padding:"10px 12px",borderTop:"1px solid var(--border)",display:"flex",gap:8,paddingBottom:"calc(10px + env(safe-area-inset-bottom))"}}>
+                <input className="input" style={{fontSize:13.5,padding:"10px 12px"}} placeholder="Ask anything…" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();sendChat();}}}/>
+                <button className="btn btn-gold" style={{padding:"10px 14px",flexShrink:0}} onClick={sendChat} disabled={aiLoading}>↑</button>
+              </div>
             </div>
           </div>
         </>
@@ -1615,6 +1562,7 @@ function TaskRow({task,clients,categories,catMap,onToggle,onDelete,onEdit,timerD
 
 function TaskModal({clients,categories,settings,task,onClose,onSave,isEdit}){
   const [f,setF]=useState(task||{title:"",category:categories[0]?.id||"",priority:"medium",dueDate:"",time:"",clientId:"",notes:"",tags:[],subtasks:[],recurrence:""});
+  const [showMore,setShowMore]=useState(isEdit||false);
   const [tagInput,setTagInput]=useState("");
   const [newSub,setNewSub]=useState("");
   const sv=(k,v)=>setF(x=>({...x,[k]:v}));
@@ -1622,7 +1570,6 @@ function TaskModal({clients,categories,settings,task,onClose,onSave,isEdit}){
   const removeTag=t=>sv("tags",(f.tags||[]).filter(x=>x!==t));
   const addSub=()=>{const t=newSub.trim();if(t){sv("subtasks",[...(f.subtasks||[]),{id:uid(),title:t,done:false}]);setNewSub("");}};
   const labels=settings.labels||DEFAULT_SETTINGS.labels;
-
   return(
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal modal-border-mobile">
@@ -1631,57 +1578,68 @@ function TaskModal({clients,categories,settings,task,onClose,onSave,isEdit}){
           <button className="btn btn-ghost btn-sm" style={{padding:"5px 10px"}} onClick={onClose}>✕</button>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div><div className="lbl">Title *</div><input className="input" value={f.title} onChange={e=>sv("title",e.target.value)} placeholder="Task title…"/></div>
+          {/* Always visible: title + due date */}
+          <div><div className="lbl">Title *</div><input className="input" autoFocus value={f.title} onChange={e=>sv("title",e.target.value)} placeholder="What needs to be done?"/></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><div className="lbl">Category</div><select className="select" value={f.category} onChange={e=>sv("category",e.target.value)}>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}</select></div>
+            <div><div className="lbl">Due Date</div><input className="input" type="date" value={f.dueDate} onChange={e=>sv("dueDate",e.target.value)}/></div>
             <div><div className="lbl">Priority</div><select className="select" value={f.priority} onChange={e=>sv("priority",e.target.value)}>{Object.entries(PRIORITIES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><div className="lbl">Due Date *</div><input className="input" type="date" value={f.dueDate} onChange={e=>sv("dueDate",e.target.value)}/></div>
-            <div><div className="lbl">Time</div><input className="input" type="time" value={f.time||""} onChange={e=>sv("time",e.target.value)}/></div>
-          </div>
-          <div><div className="lbl">{labels.clients||"Client"}</div><select className="select" value={f.clientId||""} onChange={e=>sv("clientId",e.target.value)}><option value="">— None —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <div><div className="lbl">Recurrence</div>
-            <select className="select" value={f.recurrence||""} onChange={e=>sv("recurrence",e.target.value)}>
-              <option value="">None</option><option value="Daily">Daily</option><option value="Weekly">Weekly</option><option value="Fortnightly">Fortnightly</option><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option>
-            </select>
-          </div>
-          {/* Tags */}
-          <div>
-            <div className="lbl">Tags</div>
-            <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-              {(f.tags||[]).map(t=><span key={t} className="tag" style={{cursor:"pointer"}} onClick={()=>removeTag(t)}>#{t} ✕</span>)}
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <input className="input" style={{flex:1,fontSize:13}} placeholder="#tag…" value={tagInput} onChange={e=>setTagInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addTag();}}}/>
-              <button className="btn btn-ghost btn-sm" onClick={addTag}>Add</button>
-            </div>
-          </div>
-          {/* Subtasks */}
-          <div>
-            <div className="lbl">Subtasks / Checklist</div>
-            {(f.subtasks||[]).map((sub,i)=>(
-              <div key={sub.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <div className={`subtask-check${sub.done?" done":""}`} onClick={()=>sv("subtasks",f.subtasks.map(s=>s.id===sub.id?{...s,done:!s.done}:s))}>{sub.done&&"✓"}</div>
-                <span style={{flex:1,fontSize:13,textDecoration:sub.done?"line-through":"none"}}>{sub.title}</span>
-                <button className="btn btn-red btn-sm" style={{padding:"3px 7px",fontSize:11}} onClick={()=>sv("subtasks",f.subtasks.filter(s=>s.id!==sub.id))}>✕</button>
+          {/* More options toggle */}
+          {!showMore&&(
+            <button className="btn btn-ghost btn-sm" style={{textAlign:"left",color:"var(--text3)",fontSize:12}} onClick={()=>setShowMore(true)}>
+              + More options — category, client, tags, notes…
+            </button>
+          )}
+          {/* Progressive: rest of form */}
+          {showMore&&(
+            <>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><div className="lbl">Category</div><select className="select" value={f.category} onChange={e=>sv("category",e.target.value)}>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}</select></div>
+                <div><div className="lbl">Time</div><input className="input" type="time" value={f.time||""} onChange={e=>sv("time",e.target.value)}/></div>
               </div>
-            ))}
-            <div style={{display:"flex",gap:6}}>
-              <input className="input" style={{flex:1,fontSize:13}} placeholder="Add subtask…" value={newSub} onChange={e=>setNewSub(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSub();}}}/>
-              <button className="btn btn-ghost btn-sm" onClick={addSub}>+</button>
-            </div>
-          </div>
-          <div><div className="lbl">Notes</div><textarea className="input" value={f.notes||""} onChange={e=>sv("notes",e.target.value)} placeholder="Details…"/></div>
+              <div><div className="lbl">{labels.clients||"Client"}</div><select className="select" value={f.clientId||""} onChange={e=>sv("clientId",e.target.value)}><option value="">— None —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <div><div className="lbl">Recurrence</div>
+                <select className="select" value={f.recurrence||""} onChange={e=>sv("recurrence",e.target.value)}>
+                  <option value="">None</option><option value="Daily">Daily</option><option value="Weekly">Weekly</option><option value="Fortnightly">Fortnightly</option><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option>
+                </select>
+              </div>
+              <div>
+                <div className="lbl">Tags</div>
+                <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                  {(f.tags||[]).map(t=><span key={t} className="tag" style={{cursor:"pointer"}} onClick={()=>removeTag(t)}>#{t} ✕</span>)}
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <input className="input" style={{flex:1,fontSize:13}} placeholder="#tag…" value={tagInput} onChange={e=>setTagInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addTag();}}}/>
+                  <button className="btn btn-ghost btn-sm" onClick={addTag}>Add</button>
+                </div>
+              </div>
+              <div>
+                <div className="lbl">Subtasks</div>
+                {(f.subtasks||[]).map((sub,i)=>(
+                  <div key={sub.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <div className={`subtask-check${sub.done?" done":""}`} onClick={()=>sv("subtasks",f.subtasks.map(s=>s.id===sub.id?{...s,done:!s.done}:s))}>{sub.done&&"✓"}</div>
+                    <span style={{flex:1,fontSize:13,textDecoration:sub.done?"line-through":"none"}}>{sub.title}</span>
+                    <button className="btn btn-red btn-sm" style={{padding:"3px 7px",fontSize:11}} onClick={()=>sv("subtasks",f.subtasks.filter(s=>s.id!==sub.id))}>✕</button>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:6}}>
+                  <input className="input" style={{flex:1,fontSize:13}} placeholder="Add subtask…" value={newSub} onChange={e=>setNewSub(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSub();}}}/>
+                  <button className="btn btn-ghost btn-sm" onClick={addSub}>+</button>
+                </div>
+              </div>
+              <div><div className="lbl">Notes</div><textarea className="input" value={f.notes||""} onChange={e=>sv("notes",e.target.value)} placeholder="Details…"/></div>
+            </>
+          )}
         </div>
         <div style={{display:"flex",gap:9,marginTop:18}}>
           <button className="btn btn-ghost" style={{flex:1}} onClick={onClose}>Cancel</button>
-          <button className="btn btn-gold" style={{flex:2}} onClick={()=>f.title&&f.dueDate&&onSave(f)}>{isEdit?"Save Changes":"Add"}</button>
+          <button className="btn btn-gold" style={{flex:2}} onClick={()=>f.title&&onSave(f)} disabled={!f.title}>{isEdit?"Save Changes":"Add Task"}</button>
         </div>
       </div>
     </div>
   );
 }
+
 
 function RenewalModal({clients,cur,onClose,onSave,isEdit,renewal}){
   const [f,setF]=useState(isEdit?{clientId:renewal.clientId,service:renewal.service,cost:renewal.cost,billingAmount:renewal.billingAmount,renewalDate:renewal.renewalDate,notes:renewal.notes||""}:{clientId:"",service:"",cost:"",billingAmount:"",renewalDate:"",notes:""});
